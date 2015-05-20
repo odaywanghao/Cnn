@@ -14,70 +14,29 @@
 
 import sys
 import numpy as np
-import scipy as sp
 import theano as thn
 import theano.tensor as tn
-import scipy.stats as stats
-import matplotlib.pyplot as plt
 import theano.tensor.nnet.conv as conv
-import theano.tensor.signal.downsample as downsample
+from skimage.transform import downscale_local_mean as downsample
 from copy import deepcopy
 from mlp import *
 from util import *
-from skimage.transform import downscale_local_mean as downsample
-from scipy.signal import convolve2d as conv2d
-from scipy.signal import correlate2d as corr2d
-
-
-def maxpool(data, factor):
-	"""
-	Perform max pooling of a given factor on data.
-	The image size must be divisible by the factor.
-
-	Args:
-	-----
-		data: A N x l x m1 x n1 array of feature maps.
-		factor: A tuple specifying the pooling factor.
-
-	Returns:
-	--------
-		An N x k x m2 x n2 array of feature maps.
-	"""
-	x = tn.dtensor4('x')
-	f = thn.function([x], downsample.max_pool_2d(x, factor))
-	return f(data)
 
 
 def upsample(data, factor):
-	"""
-	Get activations.
-	"""
-	return np.kron(data, np.ones(factor)) * (1.0 / np.prod(factor))
-
-
-def getActivations(data, factor):
 	"""
 	Upsample the errors for data by a given factor.
 
 	Args:
 	-----
-		errors: An N x k x m2 x n2 array of errors.
 		data: An N x l x m1 x n1 array of feature maps.
-		factor: A tuple repr. the pooling factor.
+		factor: Upsampling factor.
 
 	Returns:
 	--------
-		An N x l x m1 x n1 array of upsampled errors.
+		An N x l x m2 x n2 array of feature maps.
 	"""
-	x = tn.dtensor4('x')
-	f = thn.function([x], downsample.max_pool_2d_same_size(x, factor))
-	activations = f(data)
-	activations[np.where(activations != 0)] = 1
-	#Randomly select an activation where there are multiple in a receptive field.
-	N, k, m, n = activations.shape
-	activations = f(activations + (0.001 * np.random.randn(N, k, m, n)))
-	activations[np.where(activations != 0)] = 1
-	return activations
+	return np.kron(data, np.ones(factor)) * (1.0 / np.prod(factor))
 
 
 def fastConv2d(data, kernel, convtype='valid'):
@@ -160,7 +119,6 @@ class ConvLayer():
 		"""
 		self.kernels = self.kernels - (lr * self.dEdw)
 		self.bias = self.bias - (lr * self.dEdb)
-		#printMatrix(self.bias[0])
 
 
 	def feedf(self, data):
@@ -237,7 +195,7 @@ class Cnn():
   				print '\n'
 
   		test_clfn = self.classify(self.predict(test_data))
-  		test_ce = mce(test_clfn, test_label)
+  		test_ce = (float(test_label.shape[0]) - np.sum(np.where(test_clfn == test_label, test_clfn, 0))) / float(test_label.shape[0])
   		print '\rTest MCE:' + "{:10.2f}".format(test_ce)
 
   		return 0
