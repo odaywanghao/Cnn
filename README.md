@@ -21,64 +21,60 @@ Usage
 
 To use the cnn, create a dictionary containing a list of fully-connected layers and convolutional layers.
 
-`{`
-`	"fully-connected": [],`
-`	"convolutional"  : []`
-`}`
+	{
+		"fully-connected": [],
+		"convolutional"  : []
+	}
 
 A convolutional layer is created by specifying the number of kernels in the layer, size of each kernel and the sampling factor as tuples.
 
-`ConvLayer(16, (5,5), (2, 2))`
+	ConvLayer(16, (5,5), (2, 2))
 
 Likewise a layer in the fully connected layer is created by specifying the number of incoming units into the layer, number of outgoing units from the layer and the type of activation function for the outgoing layers.
 
-`PerceptronLayer(10, 150, "softmax")`
+	PerceptronLayer(10, 150, "softmax")
 
 Currently 3 types of activation functions are supported in the perceptron layer:
 
-`
 * Softmax
 * Hyperbolic tangent
 * Sigmoid
-`
 
 While the convolutional layer only supports the Hyperbolic tanget activation function.
 
 In each list, the layers should should be ordered heirarchically whereby the topmost layer is at the beginning of the list and so on.
 
-`
-{
-	"fully-connected": [],
-	"convolutional"  : [ ConvLayer(16, (5,5), (2, 2)),
-					     ConvLayer( 6, (5,5), (2, 2))
-					   ]
-}`
+
+	{
+		"fully-connected": [],
+		"convolutional"  : [ ConvLayer(16, (5,5), (2, 2)),
+						     ConvLayer( 6, (5,5), (2, 2))
+						   ]
+	}
 
 Ensure that the number of incoming units to the fully connected layer is equal to the total number of downsampled units in the last convolutional layer. Next release will automatically correct inconsistencies between both layers. 
 
-`
-Input image size: 28 x 28,
+	Input image size: 28 x 28
 
-{
-	"fully-connected": [ ...,
-						 PerceptronLayer(150, 256, "tanh")
-					   ],
-	"convolutional"  : [ ConvLayer(16, (5,5), (2, 2)),
-					     ConvLayer( 6, (5,5), (2, 2))
-					   ]
-}`
-
-Initialize the network using the dictionary of layers.
-
-`
-Cnn({
-		"fully-connected": [ PerceptronLayer( 10, 150, "softmax"),
+	{
+		"fully-connected": [ ...,
 							 PerceptronLayer(150, 256, "tanh")
 						   ],
 		"convolutional"  : [ ConvLayer(16, (5,5), (2, 2)),
 						     ConvLayer( 6, (5,5), (2, 2))
 						   ]
- 	})`
+	}
+
+Initialize the network using the dictionary of layers.
+
+	Cnn({
+			"fully-connected": [ PerceptronLayer( 10, 150, "softmax"),
+								 PerceptronLayer(150, 256, "tanh")
+							   ],
+			"convolutional"  : [ ConvLayer(16, (5,5), (2, 2)),
+							     ConvLayer( 6, (5,5), (2, 2))
+							   ]
+	 	})
 
 
 ### Training and Prediction
