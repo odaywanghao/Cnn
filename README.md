@@ -30,11 +30,11 @@ A convolutional layer is created by specifying the number of kernels in the laye
 
 	ConvLayer(16, (5,5), (2, 2))
 
-Likewise a layer in the fully connected layer is created by specifying the number of incoming units into the layer, number of outgoing units from the layer and the type of activation function for the outgoing layers.
+Likewise a layer in the fully connected layer is created by specifying the number of outgoing units from the layer, number of incoming units to the layer and the type of activation function for the layer.
 
 	PerceptronLayer(10, 150, "softmax")
 
-Currently 3 types of activation functions are supported in the perceptron layer:
+Currently 3 types of activation functions are supported by the perceptron layer:
 
 * Softmax
 * Hyperbolic tangent
@@ -52,7 +52,7 @@ In each list, the layers should should be ordered heirarchically whereby the top
 						   ]
 	}
 
-Ensure that the number of incoming units to the fully connected layer is equal to the total number of downsampled units in the last convolutional layer. Next release will automatically correct inconsistencies between both layers. 
+Ensure that the number of incoming units to the fully connected layer is equal to the total number of downsampled units in the last convolutional layer. Future versions of the network will automatically correct inconsistencies between both layers at initialization. 
 
 	Input image size: 28 x 28
 
@@ -99,6 +99,6 @@ References
 * le Cun (1989) *Generalization and Network Design Strategies*. 
 * le Cun and Bengio (1995) *Convolutional Networks for Images, Speech and Time-Series*.
 * Fukushima (1980) *Neocognitron: A Self-organizing Neural Network Model for a Mechanism of Pattern Recognition Unaffected by Shift in Position*.
-* RumelHart, Hinton & Williams (1986) *Learning Representations by Back-Propagating Errors*.
+* Rumelhart, Hinton & Williams (1986) *Learning Representations by Back-Propagating Errors*.
 * Bouvrie (2006) *Notes on Convolutional Neural Networks*.
  
