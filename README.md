@@ -21,11 +21,10 @@ Usage
 
 To use the cnn, create a dictionary containing a list of fully-connected layers and convolutional layers.
 
-`
-{
-	"fully-connected": [],
-	"convolutional"  : []
-}`
+`{`
+`	"fully-connected": [],`
+`	"convolutional"  : []`
+`}`
 
 A convolutional layer is created by specifying the number of kernels in the layer, size of each kernel and the sampling factor as tuples.
 
