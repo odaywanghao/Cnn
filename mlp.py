@@ -91,15 +91,18 @@ def mce(preds, labels):
 
     Args:
     ----
-        preds : An N x k array of class predictions.
-        labels: An N x k array of class labels.
+        preds, labels : An N x k binary array or an N x 1 array of class predictions.
     
     Returns:
     --------
-        The mean classification error.
+        The mean classification error over the predictions.
     """
     N, l = labels.shape
-    return np.sum(preds != labels)/float(N * l)
+
+    if l == 1:
+    	return 1.0 - np.average(np.where(pred == label, 1, 0))
+    else:
+    	return 1.0 - np.sum(np.where(pred == label, label, 0)) / float(N)
 
 
 class PerceptronLayer():

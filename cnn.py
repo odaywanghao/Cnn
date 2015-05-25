@@ -12,7 +12,6 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
-import sys
 import numpy as np
 import theano as thn
 import theano.tensor as tn
@@ -71,7 +70,7 @@ class ConvLayer():
 		-----
 			k: No. feature maps in layer.
 			ksize: Tuple repr. the size of a kernel.
-			pfctr: Pooling factor.
+			pfctr: Pooling/subsampling factor.
 		"""
 		self.pfctr = pfctr
 		self.kernels = (6.0 / (k * np.prod(ksize))) * np.random.randn(k, ksize[0], ksize[1])
@@ -152,7 +151,7 @@ class Cnn():
 
 		Args:
 		-----
-			layers: Dict of fully connected and convolutional layers arranged heirarchically.
+			layers: Dict. of fully connected and convolutional layers arranged heirarchically.
 		"""
 		self.layers = deepcopy(layers["fully-connected"]) + deepcopy(layers["convolutional"])
 		self.div_x_shape = None
@@ -174,9 +173,8 @@ class Cnn():
 
 		for i in xrange(200):
 
-			pred = self.predict(train_data)#[i].reshape(1, m, n))
-			label = train_label#np.zeros(pred.shape)
-			#label[:, train_label[i]] = 1
+			pred = self.predict(train_data)
+			label = train_label
 
 			self.backprop(pred - label) #Note: dw = w - lr * dEdw
 			self.update(params)
@@ -184,21 +182,16 @@ class Cnn():
 			train_clfn = self.classify(pred)
 			valid_clfn = self.classify(self.predict(valid_data))
 
-			#print train_clfn.shape
-			#print valid_clfn.shape
-
-			train_ce = (float(label.shape[0]) - np.sum(np.where(train_clfn == label, train_clfn, 0))) / float(label.shape[0])
-			valid_ce = (float(valid_label.shape[0]) - np.sum(np.where(valid_clfn == valid_label, valid_clfn, 0))) / float(valid_label.shape[0])
+			train_ce, valid_ce = mce(train_clfn, label), mce(valid_clfn, valid_label)
 
 			print '\rIteration:' + "{:10.2f}".format(i) + ' Train MCE:' + "{:10.2f}".format(train_ce) + ' Valid MCE:' + "{:10.2f}".format(valid_ce)
 			if i != 0 and i % 100 == 0:
   				print '\n'
 
   		test_clfn = self.classify(self.predict(test_data))
-  		test_ce = (float(test_label.shape[0]) - np.sum(np.where(test_clfn == test_label, test_clfn, 0))) / float(test_label.shape[0])
+  		test_ce = mce(test_clfn, test_label)
   		print '\rTest MCE:' + "{:10.2f}".format(test_ce)
 
-  		return 0
 
 	def backprop(self, dE):
 		"""
@@ -212,36 +205,30 @@ class Cnn():
 		for layer in self.layers[0 : self.div_ind]:
 			error = layer.bprop(error)
 
-		#Reshape output from fully-connected layer.
-		N, k, m, n = self.div_x_shape
+		N, k, m, n = self.div_x_shape #Reshape output from fully-connected layer.
 		error = error.T.reshape(N, k, m, n)
 
 		for layer in self.layers[self.div_ind:]:
 			error = layer.bprop(error)
 
 
-	def predict(self, imgs):
+	def predict(self, data):
 		"""
 		Return the probability distribution over the class labels for
-		the given images.
+		the given images, data.
 
 		Args:
 		-----
-			data: A no_imgs x img_length x img_width array.
+			data: A no_imgs x img_channels x img_length x img_width array.
 
 		Returns:
 		-------
 			A no_imgs x k_classes array.
 		"""
-		#TODO: Modify for RGB images
-		N, m, n = imgs.shape
-		data = imgs.reshape(N, 1, m, n)
-
 		for i in xrange(len(self.layers) - 1, self.div_ind - 1, -1):
 			data = self.layers[i].feedf(data)
 
-		#Reshape output of convolutional layer.
-		self.div_x_shape = data.shape
+		self.div_x_shape = data.shape #Reshape output of convolutional layer.
 		data = data.reshape(data.shape[0], np.prod(data.shape[1:])).T
 
 		for i in xrange(self.div_ind - 1, -1, -1):
@@ -287,7 +274,7 @@ class Cnn():
 
 def testMnist(filename):
 	"""
-	Test cnn using all the mnist digits.
+	Test cnn using the mnist digits.
 
 	Args:
 	-----
@@ -298,17 +285,15 @@ def testMnist(filename):
 	train_data = data['train_data'][0:10000]
 	valid_data = data['valid_data'][0:1000]
 	test_data = data['test_data']
-	train_label = data['train_label'][0:10000]#.reshape(1000, 1)
-	valid_label = data['valid_label'][0:1000]#.reshape(1000, 1)
-	test_label = data['test_label']#.reshape(10000, 1)
+	train_label = data['train_label'][0:10000]
+	valid_label = data['valid_label'][0:1000]
+	test_label = data['test_label']
 
 	print "Initializing network..."
 	layers = {
 		"fully-connected": [PerceptronLayer(10, 150, "softmax"), PerceptronLayer(150, 256, "tanh")],
-		# Ensure size of output maps in preceeding layer
-		# is equals to the size of input maps in next layer.
+		# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
 		"convolutional": [ConvLayer(16, (5,5), (2, 2)), ConvLayer(6, (5,5), (2, 2))]
-		#"convolutional": [ConvLayer(16, (5,5), (8,8), (2,2), 6), ConvLayer(6, (5,5), (24,24), (2,2), 1)]
 	}
 	cnn = Cnn(layers)
 	print "Training network..."
