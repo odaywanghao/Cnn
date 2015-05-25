@@ -30,7 +30,7 @@ A convolutional layer is created by specifying the number of kernels in the laye
 
 	ConvLayer(16, (5,5), (2, 2))
 
-Likewise a layer in the fully connected layer is created by specifying the number of outgoing units from the layer, number of incoming units to the layer and the type of activation function for the layer.
+Likewise a perceptron layer in the fully-connected section is created by specifying the number of outgoing units from the layer, number of incoming units to the layer and the type of activation function for the layer.
 
 	PerceptronLayer(10, 150, "softmax")
 
@@ -40,9 +40,9 @@ Currently 3 types of activation functions are supported by the perceptron layer:
 * Hyperbolic tangent
 * Sigmoid
 
-While the convolutional layer only supports the Hyperbolic tanget activation function.
+The convolutional layer only supports the Hyperbolic tanget activation function.
 
-In each list, the layers should should be ordered heirarchically whereby the topmost layer is at the beginning of the list and so on.
+In each list, the layers should be ordered heirarchically whereby the topmost layer is at the beginning of the list and so on.
 
 
 	{
