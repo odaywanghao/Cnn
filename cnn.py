@@ -176,7 +176,7 @@ class Cnn():
 			pred = self.predict(train_data)
 			label = train_label
 
-			self.backprop(pred - label) #Note: dw = w - lr * dEdw
+			self.backprop(pred - label) #Start differentation. Note: dw = w - lr * dEdw.
 			self.update(params)
 
 			train_clfn = self.classify(pred)
