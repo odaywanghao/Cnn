@@ -19,7 +19,7 @@ Usage
 
 ### Initialization
 
-To use the cnn, create a dictionary containing a list of fully-connected layers and convolutional layers.
+To use the cnn, you need to first specify its architecture using a dictionary. The dictionary should contain a list of fully-connected layers and convolutional layers.
 
 	{
 		"fully-connected": [],
@@ -30,7 +30,7 @@ A convolutional layer is created by specifying the number of kernels in the laye
 
 	ConvLayer(16, (5,5), (2, 2))
 
-Likewise a perceptron layer in the fully-connected section is created by specifying the number of outgoing units from the layer, number of incoming units to the layer and the type of activation function for the layer.
+Likewise a fully-connected layer is created by specifying the number of outgoing units from the layer, number of incoming units to the layer and the type of activation function for the layer.
 
 	PerceptronLayer(10, 150, "softmax")
 
@@ -52,7 +52,7 @@ In each list, the layers should be ordered heirarchically whereby the topmost la
 						   ]
 	}
 
-Ensure that the number of incoming units to the fully connected layer is equal to the total number of downsampled units in the last convolutional layer. Future versions of the network will automatically correct inconsistencies between both layers at initialization. 
+Ensure that the number of incoming units to the first fully-connected layer is equal to the total number of downsampled units in the last convolutional layer. Future versions of the network will automatically correct inconsistencies between both layers at initialization. 
 
 	Input image size: 28 x 28
 
@@ -65,7 +65,7 @@ Ensure that the number of incoming units to the fully connected layer is equal t
 						   ]
 	}
 
-Initialize the network using the dictionary of layers.
+Finally, initialize the network with the specified architecture.
 
 	Cnn({
 			"fully-connected": [ PerceptronLayer( 10, 150, "softmax"),
