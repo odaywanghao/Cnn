@@ -164,10 +164,12 @@ class Cnn():
 
 		Args:
 		-----
-			train_data 	:	no_imgs x img_length x img_width array of images.
-			valid_data 	:	no_imgs x img_length x img_width array of images.
+			train_data 	:	no_imgs x img_length x img_width x no_channels array of images.
+			valid_data 	:	no_imgs x img_length x img_width x no_channels array of images.
+			test_data	:	no_imgs x img_length x img_width x no_channels array of images.
 			train_label :	k x no_imgs binary array of image class labels.
 			valid_label :	k x no_imgs binary array of image class labels.
+			test_label	:	k x no_imgs binary array of image class labels.
 			params 		:	A dictionary of training parameters.
 		"""
 
@@ -212,19 +214,22 @@ class Cnn():
 			error = layer.bprop(error)
 
 
-	def predict(self, data):
+	def predict(self, imgs):
 		"""
 		Return the probability distribution over the class labels for
-		the given images, data.
+		the given images.
 
 		Args:
 		-----
-			data: A no_imgs x img_channels x img_length x img_width array.
+			imgs: A no_imgs x img_length x img_width x img_channels array.
 
 		Returns:
 		-------
 			A no_imgs x k_classes array.
 		"""
+		#Transform 4d array into N, no.input_planes, img_length, img_width array
+		data = np.transpose(imgs, (0, 3, 1, 2))
+
 		for i in xrange(len(self.layers) - 1, self.div_ind - 1, -1):
 			data = self.layers[i].feedf(data)
 
@@ -272,19 +277,16 @@ class Cnn():
 		return clasfn
 
 
-def testMnist(filename):
+def testMnist():
 	"""
-	Test cnn using the mnist digits.
+	Test cnn using the MNIST dataset.
+	"""
 
-	Args:
-	-----
-		filename: Name of file containing mnist digits.
-	"""
-	print "Loading data..."
-	data = np.load(filename)
-	train_data = data['train_data'][0:10000]
-	valid_data = data['valid_data'][0:1000]
-	test_data = data['test_data']
+	print "Loading MNIST images..."
+	data = np.load('data/cnnMnist.npz')
+	train_data = data['train_data'][0:10000].reshape(10000, 28, 28, 1)
+	valid_data = data['valid_data'][0:1000].reshape(1000, 28, 28, 1)
+	test_data = data['test_data'].reshape(10000, 28, 28, 1)
 	train_label = data['train_label'][0:10000]
 	valid_label = data['valid_label'][0:1000]
 	test_label = data['test_label']
@@ -300,6 +302,32 @@ def testMnist(filename):
 	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, {'learn_rate': 0.1})
 
 
+def testCifar10():
+	"""
+	Test the cnn using the CIFAR-10 dataset.
+	"""
+
+	print "Loading CIFAR-10 images..."
+	data = np.load('data/cifar10.npz')
+	train_data = data['train_data'][0:10000]
+	valid_data = data['train_data'][10000:11000]
+	test_data = data['test_data']
+	train_label = data['train_label'][0:10000]
+	valid_label = data['train_label'][10000:11000]
+	test_label = data['test_label']
+
+	print "Initializing network..."
+	layers = {
+		"fully-connected": [PerceptronLayer(10, 150, "softmax"), PerceptronLayer(150, 400, "tanh")],
+		# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
+		"convolutional": [ConvLayer(16, (5,5), (2, 2)), ConvLayer(6, (5,5), (2, 2))]
+	}
+	cnn = Cnn(layers)
+	print "Training network..."
+	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, {'learn_rate': 0.1})
+
+
 if __name__ == '__main__':
 
-	testMnist('data/cnnMnist.npz')
+	testMnist()
+	#testCifar10()

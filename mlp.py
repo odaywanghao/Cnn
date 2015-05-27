@@ -100,9 +100,9 @@ def mce(preds, labels):
     N, l = labels.shape
 
     if l == 1:
-    	return 1.0 - np.average(np.where(pred == label, 1, 0))
+    	return 1.0 - np.average(np.where(preds == labels, 1, 0))
     else:
-    	return 1.0 - np.sum(np.where(pred == label, label, 0)) / float(N)
+    	return 1.0 - (np.sum(np.where(preds == labels, labels, 0)) / float(N))
 
 
 class PerceptronLayer():
