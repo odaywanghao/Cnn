@@ -123,7 +123,7 @@ class ConvLayer():
 		#Correlate.
 		xs = rot2d90(self.x, 2)
 		xs, dEds = np.swapaxes(xs, 0, 1), np.swapaxes(dEds, 0, 1)
-		self.dEdw = fastConv2d(xs, dEds) / N
+		self.dEdw = fastConv2d(xs, dEds) / self.x.shape[0]
 
 		#Correlate
 		kernels = rot2d90(self.kernels, 2)
