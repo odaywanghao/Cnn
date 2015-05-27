@@ -44,8 +44,8 @@ def fastConv2d(data, kernel, convtype='valid'):
 
 	Args:
 	-----
-		data: A N x l x m2 x n2 array repr. data.
-		kernel: An k x l x m1 x n1 array repr. kernel.
+		data: A N x l x m2 x n2 array.
+		kernel: An k x l x m1 x n1 array.
 
 	Returns:
 	--------
@@ -57,23 +57,49 @@ def fastConv2d(data, kernel, convtype='valid'):
 	return f(data, kernel)
 
 
+def rot2d90(data, no_rots):
+	"""
+	Rotate the 2d planes in a 4d array by 90 degrees no_rots times.
+
+	Args:
+	-----
+		data: A N x k x m x n array.
+		no_rots: An integer repr. the no. rotations by 90 degrees.
+
+	Returns:
+	--------
+		A N x k x m x n array with each m x n plane rotated.
+	"""
+	#Stack, cut & place, rotate, cut & place, break.
+	N, k, m, n = data.shape
+	result = data.reshape(N * k, m, n)
+	result = np.transpose(result, (2, 1, 0))
+	result = np.rot90(result, no_rots)
+	result = np.transpose(result, (2, 1, 0))
+	result = result.reshape(N, k, m, n)
+
+	return result
+
+
+
 class ConvLayer():
 	"""
 	A Convolutional layer.
 	"""
 
-	def __init__(self, k, ksize, pfctr):
+	def __init__(self, k, l, ksize, pfctr):
 		"""
 		Initialize convolutional layer.
 
 		Args:
 		-----
 			k: No. feature maps in layer.
+			l: No. input planes in layer or no. channels in input image.
 			ksize: Tuple repr. the size of a kernel.
 			pfctr: Pooling/subsampling factor.
 		"""
 		self.pfctr = pfctr
-		self.kernels = (6.0 / (k * np.prod(ksize))) * np.random.randn(k, ksize[0], ksize[1])
+		self.kernels = (6.0 / (k * np.prod(ksize))) * np.random.randn(k, l, ksize[0], ksize[1])
 		self.bias = np.zeros((k, 1, 1))
 
 
@@ -94,18 +120,17 @@ class ConvLayer():
 
 		self.dEdb = np.sum(np.sum(np.average(dEds, axis=0), axis=1), axis=1).reshape(self.bias.shape)
 
-		dEds, x_sum = np.swapaxes(dEds, 0, 1), np.sum(self.x, axis=1)
-		#Correlate
-		for i in xrange(x_sum.shape[0]):
-			x_sum[i] = np.rot90(x_sum[i], 2)
-		self.dEdw = fastConv2d(x_sum[np.newaxis, :], dEds)[0] / dE.shape[0]
+		#Correlate.
+		xs = rot2d90(self.x, 2)
+		xs, dEds = np.swapaxes(xs, 0, 1), np.swapaxes(dEds, 0, 1)
+		self.dEdw = fastConv2d(xs, dEds) / N
 
-		dEds, kernels = np.swapaxes(dEds, 0, 1), np.zeros(self.kernels.shape)
 		#Correlate
-		for i in xrange(kernels.shape[0]):
-			kernels[i] = np.rot90(self.kernels[i], 2)
-		self.dEdx = fastConv2d(dEds, kernels[np.newaxis, :], 'full')
-		return np.tile(self.dEdx, (1, self.x.shape[1], 1, 1))
+		kernels = rot2d90(self.kernels, 2)
+		dEds, kernels = np.swapaxes(dEds, 0, 1), np.swapaxes(kernels, 0, 1)
+		self.dEdx = fastConv2d(dEds, kernels, 'full')
+
+		return self.dEdx
 
 
 	def update(self, lr):
@@ -134,9 +159,7 @@ class ConvLayer():
 		"""
 		self.x = data
 		N, l, m1, n1 = self.x.shape
-		k, m, n = self.kernels.shape
-		self.maps = fastConv2d(self.x, np.tile(self.kernels.reshape(k, 1, m, n), (1, l, 1, 1)))
-
+		self.maps = fastConv2d(self.x, self.kernels)
 		return downsample(np.tanh(self.maps + self.bias), (1, 1, self.pfctr[0], self.pfctr[1]))
 
 
@@ -295,7 +318,7 @@ def testMnist():
 	layers = {
 		"fully-connected": [PerceptronLayer(10, 150, "softmax"), PerceptronLayer(150, 256, "tanh")],
 		# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
-		"convolutional": [ConvLayer(16, (5,5), (2, 2)), ConvLayer(6, (5,5), (2, 2))]
+		"convolutional": [ConvLayer(16, 6, (5,5), (2, 2)), ConvLayer(6, 1, (5,5), (2, 2))]
 	}
 	cnn = Cnn(layers)
 	print "Training network..."
@@ -320,7 +343,7 @@ def testCifar10():
 	layers = {
 		"fully-connected": [PerceptronLayer(10, 150, "softmax"), PerceptronLayer(150, 400, "tanh")],
 		# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
-		"convolutional": [ConvLayer(16, (5,5), (2, 2)), ConvLayer(6, (5,5), (2, 2))]
+		"convolutional": [ConvLayer(16, 6, (5,5), (2, 2)), ConvLayer(6, 3, (5,5), (2, 2))]
 	}
 	cnn = Cnn(layers)
 	print "Training network..."
@@ -329,5 +352,5 @@ def testCifar10():
 
 if __name__ == '__main__':
 
-	testMnist()
-	#testCifar10()
+	#testMnist()
+	testCifar10()
