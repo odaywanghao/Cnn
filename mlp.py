@@ -64,13 +64,28 @@ def sech2(data):
 	return np.square(1 / np.cosh(data))
 
 
+def relu(data):
+	"""
+	Perform rectilinear activation on the data.
+
+	Args:
+	-----
+		data: A k x N array.
+
+	Returns:
+	--------
+		A k x N array.
+	"""
+	return np.maximum(data, 0)
+
+
 def cross_entropy(preds, labels):
     """
     Compute the cross entropy over the predictions.
 
     Args:
     -----
-        preds : An N x k array of class predicitions.
+        preds : An N x k array of class predictions.
         labels : An N x k array of class labels.
     
     Returns:
@@ -118,40 +133,40 @@ class PerceptronLayer():
 		-----
 			no_outputs: No. output classes.
 			no_inputs: No. input features.
-			outputType: Type of output ('sum', 'sigmoid', 'tanh' or 'softmax')
+			outputType: Type of output ('sum', 'sigmoid', 'tanh', 'relu' or 'softmax')
 		"""
 		self.o_type = outputType
-		if outputType == "sigmoid" or outputType == "tanh":
+		if outputType == 'sigmoid' or outputType == 'tanh':
 			self.w = (6.0/(no_outputs + no_inputs)) * np.random.randn(no_outputs, no_inputs)
 		else:
 			self.w = 0.01 * np.random.randn(no_outputs, no_inputs)
 		self.b = 0.01 * np.random.randn(no_outputs, 1)
-		if no_outputs <= 2:
-			self.o_type = "sigmoid"
 
 
-	def bprop(self, dEds):
+	def bprop(self, dEdo):
 		"""
 		Compute gradients and return sum of error from output down
 		to this layer.
 
 		Args:
 		-----
-			dEdx: A no_output x N array of errors from prev layers.
+			dEdo: A no_output x N array of errors from prev layers.
 
 		Return:
 		-------
 			A no_inputs x N array of input errors.
 		"""
 		if self.o_type == 'sigmoid':
-			dEdo = dEds
-			z = sigmoid(np.dot(self.w, self.x) + self.b)
-			dods = z * (1 - z)
+			dods = sigmoid(self.s) * (1 - sigmoid(self.s))
 			dEds = dEdo * dods
 		elif self.o_type == 'tanh':
-			dEdo = dEds
-			dods = sech2(np.dot(self.w, self.x) + self.b)
-			dEds = dEdo * dods 
+			dods = sech2(self.s)
+			dEds = dEdo * dods
+		elif self.o_type == 'relu':
+			dods = np.where(self.s > 0, 1, 0)
+			dEds = dEdo * dods
+		else:
+			dEds = dEdo #Softmax or sum.
 
 		self.dEdw = np.dot(dEds, self.x.T)
 		self.dEdb = np.sum(dEds, axis=1).reshape(self.b.shape)
@@ -182,16 +197,18 @@ class PerceptronLayer():
 			A no_outputs x N array.
 		"""
 		self.x = data
-		s = np.dot(self.w, self.x) + self.b
+		self.s = np.dot(self.w, self.x) + self.b
 
-		if self.o_type == "sum":
-			return s
-		elif self.o_type == "tanh":
-			return np.tanh(s)
-		elif self.o_type == "softmax": 
-			return softmax(s)
-
-		return sigmoid(s)
+		if self.o_type == 'sigmoid':
+			return sigmoid(s)
+		elif self.o_type == 'tanh':
+			return np.tanh(self.s)
+		elif self.o_type == 'relu':
+			return relu(self.s)
+		elif self.o_type == 'softmax': 
+			return softmax(self.s)
+		else:
+			return self.s #Sum
 
 
 class Mlp():
