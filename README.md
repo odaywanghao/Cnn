@@ -88,17 +88,19 @@ To Do
 
 1. Check and automatically rectify inconsistent connection between fully-connected and convolutional layers of network.
 2. Allow exportation and importation of network weights.
-3. Implement drop-out.
-4. Add tool for visualization of kernels.
-5. Allow GPU utilization.
-6. Implement techniques for smoother learning: momentum and weight penalties.
+3. Add tool for visualization of kernels.
+4. Allow GPU utilization.
 
 References
 ----------
 
 * le Cun (1989) *Generalization and Network Design Strategies*. 
-* le Cun and Bengio (1995) *Convolutional Networks for Images, Speech and Time-Series*.
+* le Cun & Bengio (1995) *Convolutional Networks for Images, Speech and Time-Series*.
 * Fukushima (1980) *Neocognitron: A Self-organizing Neural Network Model for a Mechanism of Pattern Recognition Unaffected by Shift in Position*.
 * Rumelhart, Hinton & Williams (1986) *Learning Representations by Back-Propagating Errors*.
 * Bouvrie (2006) *Notes on Convolutional Neural Networks*.
+* Andrade (2014) *Best Practices for Convolutional Neural Networks Applied to Object Recognition in Images*.
+* Sutskever, Martens, Dahl & Hinton (2013) *On the importance of initialization and momentum in deep learning*.
+* Krizhevsky, Sutskever & Hinton (2012) *ImageNet Classification with Deep Convolutional Neural Networks*.
+* Srivastava, Hinton, Krizhevsky, Sutskever & Salakhutdinov (2014) *Dropout: A Simple Way to Prevent Neural Networks from Overfitting*.
  

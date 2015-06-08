@@ -32,6 +32,21 @@ def sigmoid(data):
 	return 1 / (1 + np.exp(-data))
 
 
+def relu(data):
+	"""
+	Perform rectilinear activation on the data.
+
+	Args:
+	-----
+		data: A k x N array.
+
+	Returns:
+	--------
+		A k x N array.
+	"""
+	return np.maximum(data, 0)
+
+
 def softmax(data):
 	"""
 	Run the softmax activation function over the input data.
@@ -62,21 +77,6 @@ def sech2(data):
 		A k x N array.
 	"""
 	return np.square(1 / np.cosh(data))
-
-
-def relu(data):
-	"""
-	Perform rectilinear activation on the data.
-
-	Args:
-	-----
-		data: A k x N array.
-
-	Returns:
-	--------
-		A k x N array.
-	"""
-	return np.maximum(data, 0)
 
 
 def cross_entropy(preds, labels):
@@ -125,7 +125,7 @@ class PerceptronLayer():
 	A perceptron layer.
 	"""
 
-	def __init__(self, no_outputs, no_inputs, outputType="sigmoid"):
+	def __init__(self, no_outputs, no_inputs, outputType="relu", prob=1):
 		"""
 		Initialize fully connected layer.
 
@@ -134,13 +134,17 @@ class PerceptronLayer():
 			no_outputs: No. output classes.
 			no_inputs: No. input features.
 			outputType: Type of output ('sum', 'sigmoid', 'tanh', 'relu' or 'softmax')
+			prob: Prob of activation units being present during dropout i.e 1 for no dropout.
 		"""
 		self.o_type = outputType
 		if outputType == 'sigmoid' or outputType == 'tanh':
 			self.w = (6.0/(no_outputs + no_inputs)) * np.random.randn(no_outputs, no_inputs)
 		else:
 			self.w = 0.01 * np.random.randn(no_outputs, no_inputs)
-		self.b = 0.01 * np.random.randn(no_outputs, 1)
+
+		self.b = np.zeros((no_outputs, 1))
+		self.v_w, self.v_b = 0, 0
+		self.p, self.train = prob, False
 
 
 	def bprop(self, dEdo):
@@ -157,14 +161,11 @@ class PerceptronLayer():
 			A no_inputs x N array of input errors.
 		"""
 		if self.o_type == 'sigmoid':
-			dods = sigmoid(self.s) * (1 - sigmoid(self.s))
-			dEds = dEdo * dods
+			dEds = dEdo * sigmoid(self.s) * (1 - sigmoid(self.s))
 		elif self.o_type == 'tanh':
-			dods = sech2(self.s)
-			dEds = dEdo * dods
+			dEds = dEdo * sech2(self.s)
 		elif self.o_type == 'relu':
-			dods = np.where(self.s > 0, 1, 0)
-			dEds = dEdo * dods
+			dEds = dEdo * np.where(self.s > 0, 1, 0)
 		else:
 			dEds = dEdo #Softmax or sum.
 
@@ -175,13 +176,21 @@ class PerceptronLayer():
 		return self.dEdx
 
 
-	def update(self, lr):
+	def update(self, eps_w, eps_b, mu):
 		"""
 		Update the weights in this layer.
+
+		Args:
+		-----
+			eps_w: Learn rate for weights.
+			eps_b: Learn rate for bias.
+			mu: Momentum coefficient.
 		"""
-		m, N = self.x.shape
-		self.w = self.w - (lr * (self.dEdw / N))
-		self.b = self.b - (lr * (self.dEdb / N))
+		k, N = self.x.shape
+		self.v_w = (self.v_w * mu) - (eps_w * (self.dEdw / N))
+		self.v_b = (self.v_b * mu) - (eps_b * (self.dEdb / N))
+		self.w = self.w + self.v_w
+		self.b = self.b + self.v_b
 
 
 	def feedf(self, data):
@@ -196,8 +205,12 @@ class PerceptronLayer():
 		-------
 			A no_outputs x N array.
 		"""
-		self.x = data
-		self.s = np.dot(self.w, self.x) + self.b
+		if self.train:
+			self.x = data * np.random.binomial(1, self.p, data.shape)
+			self.s = np.dot(self.w, self.x) + self.b
+		else:
+			self.x = data
+			self.s = np.dot(self.w * self.p, self.x) + self.b
 
 		if self.o_type == 'sigmoid':
 			return sigmoid(s)
@@ -227,7 +240,7 @@ class Mlp():
 		self.layers = deepcopy(layers)
 
 
-	def train(self, train_data, train_target, valid_data, valid_target, test_data, test_target, hyperparameters):
+	def train(self, train_data, train_target, valid_data, valid_target, test_data, test_target, hyperparams):
 		"""
 		Train the mlp on the training set and validation set using the provided
 		hyperparameters.
@@ -238,19 +251,29 @@ class Mlp():
 			train_target :	no_instance x k_class matrix.
 			valid_data 	:	no_instance x no_features matrix.
 			valid_target :	no_instance x k_class matrix.array shuffle numpy
-			hyperparameters :	A dictionary of training parameters.
+			hyperparams :	A dictionary of training parameters.
 		"""
+		#Notify layers of training.
+		for layers in self.layers:
+			layers.train = True
+
+		#Start training.
 		N, m1 = train_data.shape
 		N, m2 = train_target.shape
 
-		# Train the network with batch 'cos
-		# online too erratic & mini-batch too much work.
-		epochs = hyperparameters['epochs']
+		if hyperparams['learn_rate']: #Create seperate learn rates.
+			hyperparams['learn_rate_w'] = hyperparams['learn_rate']
+			hyperparams['learn_rate_b'] = hyperparams['learn_rate']
+
+		if 'momentum' not in hyperparams.keys():
+			hyperparams['momentum'] = 0
+
+		epochs = hyperparams['epochs']
 
 		for epoch in xrange(epochs):
 
 			self.backprop(self.predict(train_data) - train_target)
-			self.update(hyperparameters)
+			self.update(hyperparams)
 
 			#Measure network's performance.
 			train_class = self.classify(self.predict(train_data))
@@ -261,11 +284,14 @@ class Mlp():
 			if epoch != 0 and epoch % 100 == 0:
   				print '\n'
 
+  		#Notify layers of end of training.
+  		for layers in self.layers:
+			layers.train = False
+
+		#Test time.
   		test_class = self.classify(self.predict(test_data))
 		ce_test = mce(test_class, test_target)
   		print '\r Test MCE:' + "{:10.2f}".format(ce_test)
-
-  		return 0
 
 
   	def backprop(self, dEds):
@@ -281,17 +307,17 @@ class Mlp():
   			error = self.layers[i].bprop(error)
 
 
-  	def update(self, parameters):
+  	def update(self, params):
   		"""
   		Update the network weights using the training
   		parameters.
 
   		Args:
   		-----
-  			parameters: Training parameters.
+  			params: Training parameters.
   		"""
   		for layer in self.layers:
-  			layer.update(parameters['learn_rate'])
+  			layer.update(params['learn_rate_w'], params['learn_rate_b'], params['momentum'])
 
 
   	def predict(self, data):
@@ -338,22 +364,6 @@ class Mlp():
 		return prediction
 
 
-	def saveModel(self):
-		"""
-		Save the neural network model.
-		"""
-		#TODO: Implement.
-		pass
-
-
-	def loadModel(self, model):
-		"""
-		Load a model for this neural network.
-		"""
-		#TODO: Implement this later.
-		pass
-
-
 def testmlp(filename):
   	"""
   	Test mlp with mnist 2 and 3 digits.
@@ -369,9 +379,8 @@ def testmlp(filename):
 	target_train = np.hstack((np.zeros((1, data['train2'].shape[1])), np.ones((1, data['train3'].shape[1]))))
 	target_valid = np.hstack((np.zeros((1, data['valid2'].shape[1])), np.ones((1, data['valid3'].shape[1]))))
 	target_test = np.hstack((np.zeros((1, data['test2'].shape[1])), np.ones((1, data['test3'].shape[1]))))
-
 	mlp = Mlp([PerceptronLayer(1, 10), PerceptronLayer(10, 256, "tanh")])
-	mlp.train(input_train.T, target_train.T, input_valid.T, target_valid.T, input_test.T, target_test.T, {'learn_rate': 0.1, 'epochs': 1600})
+	mlp.train(input_train.T, target_train.T, input_valid.T, target_valid.T, input_test.T, target_test.T, {'learn_rate': 0.1, 'momentum': 0.5, 'epochs': 600})
 
 
 if __name__ == '__main__':
