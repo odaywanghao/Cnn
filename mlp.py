@@ -134,7 +134,7 @@ def eps_decay(itr, eps, beta):
 	--------
 		Decayed learn rate.
 	"""
-	return eps / (1 + (itr * beta))
+	return eps / (1.0 + (itr * beta))
 
 
 
@@ -194,7 +194,7 @@ class PerceptronLayer():
 		return self.dEdx
 
 
-	def update(self, eps_w, eps_b, mu, phi):
+	def update(self, eps_w, eps_b, mu, beta):
 		"""
 		Update the weights in this layer.
 
@@ -203,11 +203,11 @@ class PerceptronLayer():
 			eps_w: Learn rate for weights.
 			eps_b: Learn rate for bias.
 			mu: Momentum coefficient.
-			phi: Weight decay coefficient.
+			beta: Weight decay coefficient.
 		"""
 		k, N = self.x.shape
-		self.v_w = (self.v_w * mu) - (eps_w * phi * self.w) - (eps_w * (self.dEdw / N))
-		self.v_b = (self.v_b * mu) - (eps_b * phi * self.b) - (eps_b * (self.dEdb / N))
+		self.v_w = (self.v_w * mu) - (eps_w * beta * self.w) - (eps_w * (self.dEdw / N))
+		self.v_b = (self.v_b * mu) - (eps_b * beta * self.b) - (eps_b * (self.dEdb / N))
 		self.w = self.w + self.v_w
 		self.b = self.b + self.v_b
 

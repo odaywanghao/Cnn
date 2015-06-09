@@ -198,7 +198,7 @@ class ConvLayer():
 		return self.dEdx
 
 
-	def update(self, eps_w, eps_b, mu, phi):
+	def update(self, eps_w, eps_b, mu, beta):
 		"""
 		Update the weights in this layer.
 
@@ -207,10 +207,10 @@ class ConvLayer():
 			eps_w: Learning rate for kernels.
 			eps_b: Learning rate for bias.
 			mu: Momentum coefficient.
-			phi: Weight decay coefficient.
+			beta: Weight decay coefficient.
 		"""
-		self.v_w = (self.v_w * mu) - (eps_w * phi * self.kernels) - (eps_w * self.dEdw)
-		self.v_b = (self.v_b * mu) - (eps_b * phi * self.bias) - (eps_b * self.dEdb)
+		self.v_w = (self.v_w * mu) - (eps_w * beta * self.kernels) - (eps_w * self.dEdw)
+		self.v_b = (self.v_b * mu) - (eps_b * beta * self.bias) - (eps_b * self.dEdb)
 		self.kernels = self.kernels + self.v_w
 		self.bias = self.bias + self.v_b
 
@@ -277,12 +277,11 @@ class Cnn():
 
 		#Check the parameters
 
-		N, m, n, l = train_data.shape
-		itrs = 0
 		print "Training network..."
+		N, itrs = train_data.shape[0], 0
 		for epoch in xrange(params['epochs']):
 
-			start, stop = range(0, N, params['batch']), range(params['batch_size'], N, params['batch_size'])
+			start, stop = range(0, N, params['batch_size']), range(params['batch_size'], N, params['batch_size'])
 
 			for i, j in zip(start, stop):
 
@@ -290,10 +289,10 @@ class Cnn():
 				self.backprop(pred - train_label[i, j])
 				self.update(params, itrs)
 
-				tc, vc  = self.classify(pred), 0#self.classify(self.predict(valid_data))
-				ce_train, ce_valid = mce(tc, label), 0#mce(vc, valid_label)
+				tc, vc  = self.classify(pred), self.classify(self.predict(valid_data))
+				ce_train, ce_valid = mce(tc, label), mce(vc, valid_label)
 
-				print '\r| Epoch: {:5d}  |  Iteration: {:5d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrn, ce_train, ce_valid)
+				print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrn, ce_train, ce_valid)
 				if epoch != 0 and epoch % 100 == 0:
   					print '--------------------------------------------------------------------------------'
 
@@ -304,10 +303,10 @@ class Cnn():
 			self.backprop(pred - train_label[i:])
 			self.update(params, itrs)
 
-			tc, vc  = self.classify(pred), 0#self.classify(self.predict(valid_data))
-			ce_train, ce_valid = mce(tc, label), 0#mce(vc, valid_label)
+			tc, vc  = self.classify(pred), self.classify(self.predict(valid_data))
+			ce_train, ce_valid = mce(tc, label), mce(vc, valid_label)
 
-			print '\r| Epoch: {:5d}  |  Iteration: {:5d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrn, ce_train, ce_valid)
+			print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrn, ce_train, ce_valid)
 			if epoch != 0 and epoch % 100 == 0:
   				print '--------------------------------------------------------------------------------'
 
@@ -426,47 +425,57 @@ def testMnist():
 
 	print "Loading MNIST images..."
 	data = np.load('data/cnnMnist.npz')
-	train_data = data['train_data'].reshape(10000, 28, 28, 1)
-	valid_data = data['valid_data'].reshape(1000, 28, 28, 1)
+	#Store data in this shape.
+	train_data = data['train_data'].reshape(55000, 28, 28, 1)
+	valid_data = data['valid_data'].reshape(5000, 28, 28, 1)
 	test_data = data['test_data'].reshape(10000, 28, 28, 1)
 	train_label = data['train_label']
 	valid_label = data['valid_label']
 	test_label = data['test_label']
 
-	print "Centering images..."
+	#Center images
 
 	print "Initializing network..."
-	fc_params = {
-		'learn_rate_decay': 0.1,
-		'decay_interval': 8,
-		'learn_rate_w': 0.1,
-		'learn_rate_b': 0.1,
-		'mu': 0.9
-	}
-
-	conv_params = {
-		'learn_rate_decay': 0.1,
-		'decay_interval': 8,
-		'learn_rate_w': 0.1,
-		'learn_rate_b': 0.1,
-		'mu': 0.9
-	}
-
 	layers = {
-		"fc": [
-				PerceptronLayer(10, 150, 0.9, "softmax"),
+		"fc":[
+				PerceptronLayer(10, 150, 0.9, 'softmax'),
 				PerceptronLayer(150, 256, 0.8, init_b=1)
 			],
-		"conv": [
+		#Size of output maps from conv layer MUST EQUAL size of input maps to fc layer.
+		"conv":[
 				PoolLayer((2, 2), 'max'),
 				ConvLayer(16, 6, (5,5), init_b=1),
 				PoolLayer((2, 2), 'max'),
 				ConvLayer(6, 1, (5,5))
 			]
 	}
+
+	params = {
+
+		'epochs': 30,
+		'batch_size': 128,
+
+		'fc':{
+			'eps_w': 0.2,
+			'eps_b': 0.2,
+			'eps_beta': 0.01,
+			'eps_sat': 1000,
+			'mu': 0.9,
+			'w_beta': 0.0005
+		},
+
+		'conv':{
+			'eps_w': 0.2,
+			'eps_b': 0.2,
+			'eps_beta': 0.05,
+			'eps_sat': 1000,
+			'mu': 0.9,
+			'w_beta': 0.0005
+		}
+	}
+
 	cnn = Cnn(layers)
-	print "Training network..."
-	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, {'epochs': 30, 'batch_size': 100, 'fc': fc_params, 'conv': conv_params})
+	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
 
 
 def testCifar10():
@@ -479,36 +488,16 @@ def testCifar10():
 	train_data, valid_data, test_data = data['train_data'][:50000], data['train_data'][50001:], data['test_data']
 	train_label, valid_label, test_label = data['train_label'][:50000], data['train_label'][50001:], data['test_label']
 
-	print "Centering images..."
+	#Center images.
 
 	print "Initializing network..."
 
-	#Fully-connected layer params
-	fc_params = {
-		'learn_rate_decay': 0.01,
-		'lr_saturation': 1000,
-		'learn_rate_w': 0.17,
-		'learn_rate_b': 0.17,
-		'momentum': 0.9,
-		'weight_decay': 
-	}
-
-	#Conv layer params
-	conv_params = {
-		'learn_rate_decay': 0.05,
-		'lr_saturation': 1000,
-		'learn_rate_w': 0.17,
-		'learn_rate_b': 0.17,
-		'momentum': 0.9,
-		'weight_decay': 
-	}
-
-	#NOTE: Size of output maps from conv layer MUST EQUAL size of input maps to fc layer.
 	layers = {
 		"fc":[
 				PerceptronLayer(10, 1000, 0.9, 'softmax', init_w=0.5),
 				PerceptronLayer(10, 1000, 0.8, init_w=0.5, init_b=1)
 			],
+		#Size of output maps from conv layer MUST EQUAL size of input maps to fc layer.
 		"conv":[
 				ConvLayer(160, 64, (5, 5), init_w=0.05, init_b=1),
 				PoolLayer((2, 2), 'max'),
@@ -518,8 +507,32 @@ def testCifar10():
 			]
 	}
 
+	params = {
+
+		'epochs': 30,
+		'batch_size': 128,
+
+		'fc':{
+			'eps_w': 0.17,
+			'eps_b': 0.17,
+			'eps_beta': 0.01,
+			'eps_sat': 1000,
+			'mu': 0.9,
+			'w_beta': 0.0005
+		},
+
+		'conv':{
+			'eps_w': 0.17,
+			'eps_b': 0.17,
+			'eps_beta': 0.01,
+			'eps_sat': 1000,
+			'mu': 0.9,
+			'w_beta': 0.0005
+		}
+	}
+
 	cnn = Cnn(layers)
-	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, {'epochs': 30, 'batch_size': 128, 'fc': fc_params, 'conv': conv_params})
+	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
 
 
 if __name__ == '__main__':
