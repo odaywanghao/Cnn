@@ -120,12 +120,30 @@ def mce(preds, labels):
     	return 1.0 - (np.sum(np.where(preds == labels, labels, 0)) / float(N))
 
 
+def eps_decay(itr, eps, beta):
+	"""
+	Return the learn rate decayed after a no. of iterations.
+
+	Args:
+	-----
+		itr: Number of iterations.
+		eps: Learn rate.
+		beta: Decay coefficient.
+
+	Returns:
+	--------
+		Decayed learn rate.
+	"""
+	return eps / (1 + (itr * beta))
+
+
+
 class PerceptronLayer():
 	"""
 	A perceptron layer.
 	"""
 
-	def __init__(self, no_outputs, no_inputs, outputType="relu", prob=1):
+	def __init__(self, no_outputs, no_inputs, prob=1, outputType="relu", init_w=0.01, init_b=0):
 		"""
 		Initialize fully connected layer.
 
@@ -133,16 +151,16 @@ class PerceptronLayer():
 		-----
 			no_outputs: No. output classes.
 			no_inputs: No. input features.
-			outputType: Type of output ('sum', 'sigmoid', 'tanh', 'relu' or 'softmax')
 			prob: Prob of activation units being present during dropout i.e 1 for no dropout.
+			outputType: Type of output ('sum', 'sigmoid', 'tanh', 'relu' or 'softmax')
 		"""
 		self.o_type = outputType
 		if outputType == 'sigmoid' or outputType == 'tanh':
 			self.w = (6.0/(no_outputs + no_inputs)) * np.random.randn(no_outputs, no_inputs)
 		else:
-			self.w = 0.01 * np.random.randn(no_outputs, no_inputs)
+			self.w = init_w * np.random.randn(no_outputs, no_inputs)
 
-		self.b = np.zeros((no_outputs, 1))
+		self.b = init_b * np.ones((no_outputs, 1))
 		self.v_w, self.v_b = 0, 0
 		self.p, self.train = prob, False
 
@@ -176,7 +194,7 @@ class PerceptronLayer():
 		return self.dEdx
 
 
-	def update(self, eps_w, eps_b, mu):
+	def update(self, eps_w, eps_b, mu, phi):
 		"""
 		Update the weights in this layer.
 
@@ -185,10 +203,11 @@ class PerceptronLayer():
 			eps_w: Learn rate for weights.
 			eps_b: Learn rate for bias.
 			mu: Momentum coefficient.
+			phi: Weight decay coefficient.
 		"""
 		k, N = self.x.shape
-		self.v_w = (self.v_w * mu) - (eps_w * (self.dEdw / N))
-		self.v_b = (self.v_b * mu) - (eps_b * (self.dEdb / N))
+		self.v_w = (self.v_w * mu) - (eps_w * phi * self.w) - (eps_w * (self.dEdw / N))
+		self.v_b = (self.v_b * mu) - (eps_b * phi * self.b) - (eps_b * (self.dEdb / N))
 		self.w = self.w + self.v_w
 		self.b = self.b + self.v_b
 
@@ -213,7 +232,7 @@ class PerceptronLayer():
 			self.s = np.dot(self.w * self.p, self.x) + self.b
 
 		if self.o_type == 'sigmoid':
-			return sigmoid(s)
+			return sigmoid(self.s)
 		elif self.o_type == 'tanh':
 			return np.tanh(self.s)
 		elif self.o_type == 'relu':
@@ -261,7 +280,7 @@ class Mlp():
 		N, m1 = train_data.shape
 		N, m2 = train_target.shape
 
-		if hyperparams['learn_rate']: #Create seperate learn rates.
+		if 'learn_rate' in hyperparams.keys(): #Create seperate learn rates.
 			hyperparams['learn_rate_w'] = hyperparams['learn_rate']
 			hyperparams['learn_rate_b'] = hyperparams['learn_rate']
 
@@ -280,9 +299,9 @@ class Mlp():
 			valid_class = self.classify(self.predict(valid_data))
 			ce_train = mce(train_class, train_target)
 			ce_valid = mce(valid_class, valid_target)
-			print '\rEpoch' + "{:10.2f}".format(epoch) + ' Train MCE:' + "{:10.2f}".format(ce_train) + ' Validation MCE:' + "{:10.2f}".format(ce_valid)
+			print '\r| Epoch: {:5d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, ce_train, ce_valid)
 			if epoch != 0 and epoch % 100 == 0:
-  				print '\n'
+  				print '------------------------------------------------------------'
 
   		#Notify layers of end of training.
   		for layers in self.layers:
@@ -379,8 +398,8 @@ def testmlp(filename):
 	target_train = np.hstack((np.zeros((1, data['train2'].shape[1])), np.ones((1, data['train3'].shape[1]))))
 	target_valid = np.hstack((np.zeros((1, data['valid2'].shape[1])), np.ones((1, data['valid3'].shape[1]))))
 	target_test = np.hstack((np.zeros((1, data['test2'].shape[1])), np.ones((1, data['test3'].shape[1]))))
-	mlp = Mlp([PerceptronLayer(1, 10), PerceptronLayer(10, 256, "tanh")])
-	mlp.train(input_train.T, target_train.T, input_valid.T, target_valid.T, input_test.T, target_test.T, {'learn_rate': 0.1, 'momentum': 0.5, 'epochs': 600})
+	mlp = Mlp([PerceptronLayer(1, 10, 1, 'sigmoid'), PerceptronLayer(10, 256, 1, 'relu')])
+	mlp.train(input_train.T, target_train.T, input_valid.T, target_valid.T, input_test.T, target_test.T, {'learn_rate': 0.1, 'momentum': 0, 'epochs': 1100})
 
 
 if __name__ == '__main__':
