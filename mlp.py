@@ -143,7 +143,7 @@ class PerceptronLayer():
 	A perceptron layer.
 	"""
 
-	def __init__(self, no_outputs, no_inputs, prob=1, outputType="relu", init_w=0.01, init_b=0):
+	def __init__(self, no_outputs, no_inputs, outputType="relu", init_w=0.01, init_b=0):
 		"""
 		Initialize fully connected layer.
 
@@ -161,8 +161,8 @@ class PerceptronLayer():
 			self.w = init_w * np.random.randn(no_outputs, no_inputs)
 
 		self.b = init_b * np.ones((no_outputs, 1))
-		self.v_w, self.v_b = 0, 0
-		self.p, self.train = prob, False
+		#self.v_w, self.v_b = 0, 0
+		#self.p, self.train = prob, False
 
 
 	def bprop(self, dEdo):
@@ -206,10 +206,10 @@ class PerceptronLayer():
 			beta: Weight decay coefficient.
 		"""
 		k, N = self.x.shape
-		self.v_w = (self.v_w * mu) - (eps_w * beta * self.w) - (eps_w * (self.dEdw / N))
-		self.v_b = (self.v_b * mu) - (eps_b * beta * self.b) - (eps_b * (self.dEdb / N))
-		self.w = self.w + self.v_w
-		self.b = self.b + self.v_b
+		#self.v_w = (self.v_w * mu) - (eps_w * beta * self.w) - (eps_w * (self.dEdw / N))
+		#self.v_b = (self.v_b * mu) - (eps_b * beta * self.b) - (eps_b * (self.dEdb / N))
+		self.w = self.w - (eps_w * (self.dEdw / N))
+		self.b = self.b - (eps_b * (self.dEdb / N))
 
 
 	def feedf(self, data):
@@ -224,12 +224,12 @@ class PerceptronLayer():
 		-------
 			A no_outputs x N array.
 		"""
-		if self.train:
-			self.x = data * np.random.binomial(1, self.p, data.shape)
-			self.s = np.dot(self.w, self.x) + self.b
-		else:
-			self.x = data
-			self.s = np.dot(self.w * self.p, self.x) + self.b
+		#if self.train:
+		#	self.x = data * np.random.binomial(1, self.p, data.shape)
+		#	self.s = np.dot(self.w, self.x) + self.b
+		#else:
+		self.x = data
+		self.s = np.dot(self.w, self.x) + self.b
 
 		if self.o_type == 'sigmoid':
 			return sigmoid(self.s)

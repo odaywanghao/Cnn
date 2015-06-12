@@ -87,32 +87,35 @@ class PoolLayer():
 		self.type, self.factor, self.grad = pool_type, factor, None
 
 
-	def bprop(self, dE):
+	def bprop(self, dEdo):
 		"""
 		Compute error gradients and return sum of error from output down 
 		to this layer.
 
 		Args:
 		-----
-			dE: A N x k x m2 x n2 array of errors from prev layers.
+			dEdo: A N x k x m2 x n2 array of errors from prev layers.
 
 		Returns:
 		--------
 			A N x k x x m1 x m1 array of errors.
 		"""
 		if self.type == 'max':
-			return np.kron(data, np.ones(factor)) * self.grad
+			return np.kron(dEdo, np.ones(self.factor)) * self.grad
 		else:
-			return np.kron(data, np.ones(factor)) * (1.0 / np.prod(factor))
+			return np.kron(dEdo, np.ones(self.factor)) * (1.0 / np.prod(self.factor))
 			
 
-	def update(self, lr):
+	def update(self, eps_w, eps_b, mu, beta):
 		"""
 		Update the weights in this layer.
 
 		Args:
 		-----
-			lr: Learning rate.
+			eps_w: Learning rate for kernels.
+			eps_b: Learning rate for bias.
+			mu: Momentum coefficient.
+			beta: Weight decay coefficient.
 		"""
 		pass #Nothing to do here :P
 
@@ -160,7 +163,7 @@ class ConvLayer():
 		self.o_type = outputType
 		self.kernels = init_w * np.random.randn(k, l, ksize[0], ksize[1])
 		self.bias = init_b * np.ones((k, 1, 1))
-		self.v_w, self.v_b = 0, 0
+		#self.v_w, self.v_b = 0, 0
 
 
 	def bprop(self, dEdo):
@@ -209,10 +212,10 @@ class ConvLayer():
 			mu: Momentum coefficient.
 			beta: Weight decay coefficient.
 		"""
-		self.v_w = (self.v_w * mu) - (eps_w * beta * self.kernels) - (eps_w * self.dEdw)
-		self.v_b = (self.v_b * mu) - (eps_b * beta * self.bias) - (eps_b * self.dEdb)
-		self.kernels = self.kernels + self.v_w
-		self.bias = self.bias + self.v_b
+		#self.v_w = (self.v_w * mu) - (eps_w * beta * self.kernels) - (eps_w * self.dEdw)
+		#self.v_b = (self.v_b * mu) - (eps_b * beta * self.bias) - (eps_b * self.dEdb)
+		self.kernels = self.kernels - (eps_w * self.dEdw)
+		self.bias = self.bias - (eps_b * self.dEdb)
 
 
 	def feedf(self, data):
@@ -272,31 +275,38 @@ class Cnn():
 			params 		:	A dictionary of training parameters.
 		"""
 		#Start training: notify fc layers.
-		for fcl in self.layers[0 : self.div_ind]:
-			fcl.train = True
+		#for fcl in self.layers[0 : self.div_ind]:
+		#	fcl.train = True
 
 		#Check the parameters
 
 		print "Training network..."
-		N, itrs = train_data.shape[0], 0
+		plt.ion()
+		N, itrs, train_errors, valid_errors = train_data.shape[0], 0, [], []
+
 		for epoch in xrange(params['epochs']):
+
+			avg_train_errors, avg_valid_errors = [], []
 
 			start, stop = range(0, N, params['batch_size']), range(params['batch_size'], N, params['batch_size'])
 
 			for i, j in zip(start, stop):
 
-				pred = self.predict(train_data[i, j])
-				self.backprop(pred - train_label[i, j])
+				pred = self.predict(train_data[i:j])
+				self.backprop(pred - train_label[i:j])
 				self.update(params, itrs)
 
 				tc, vc  = self.classify(pred), self.classify(self.predict(valid_data))
-				ce_train, ce_valid = mce(tc, label), mce(vc, valid_label)
+				ce_train, ce_valid = mce(tc, train_label[i:j]), mce(vc, valid_label)
 
-				print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrn, ce_train, ce_valid)
+				print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrs, ce_train, ce_valid)
 				if epoch != 0 and epoch % 100 == 0:
   					print '--------------------------------------------------------------------------------'
 
+
   				itrs = itrs + 1
+  				avg_train_errors.append(ce_train)
+  				avg_valid_errors.append(ce_valid)
 
   			i = start[-1]
   			pred = self.predict(train_data[i:])
@@ -304,23 +314,38 @@ class Cnn():
 			self.update(params, itrs)
 
 			tc, vc  = self.classify(pred), self.classify(self.predict(valid_data))
-			ce_train, ce_valid = mce(tc, label), mce(vc, valid_label)
+			ce_train, ce_valid = mce(tc, train_label[i:]), mce(vc, valid_label)
 
-			print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrn, ce_train, ce_valid)
+			print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrs, ce_train, ce_valid)
 			if epoch != 0 and epoch % 100 == 0:
   				print '--------------------------------------------------------------------------------'
 
   			itrs = itrs + 1
+  			avg_train_errors.append(ce_train)
+  			avg_valid_errors.append(ce_valid)
+
+  			plt.show()
+  			train_errors.append(np.average(avg_train_errors))
+  			valid_errors.append(np.average(avg_valid_errors))
+  			plt.xlabel('Epochs')
+  			plt.ylabel('Train (green) and Valid (blue) mce')
+  			plt.plot(range(epoch + 1), train_errors, '-g')
+  			plt.plot(range(epoch + 1), valid_errors, '-b')
+  			plt.axis([0, params['epochs'], 0, 1.00])
+  			plt.draw() #Add fucking legend later.
 
   		#End training: notify fc layers.
-  		for fcl in self.layers[0 : self.div_ind]:
-			fcl.train = False
+  		#for fcl in self.layers[0 : self.div_ind]:
+		#	fcl.train = False
+		plt.ioff()
 
 		#Test time.
   		tc = self.classify(self.predict(test_data))
   		print '\nTest mce: {:.2f}'.format(mce(tc, test_label))
 
   		#Plot a graph of the training process
+
+  		#After training, save network architecture.
 
 
 	def backprop(self, dE):
@@ -380,19 +405,19 @@ class Cnn():
 		"""
 		fc, conv = params['fc'], params['conv']
 
-		i = min(fc['eps_sat'], itr)
-		eps_w = eps_decay(i, fc['eps_w'], fc['eps_beta'])
-		eps_b = eps_decay(i, fc['eps_b'], fc['eps_beta'])
+		#i = min(fc['eps_sat'], itr)
+		#eps_w = eps_decay(i, fc['eps_w'], fc['eps_beta'])
+		#eps_b = eps_decay(i, fc['eps_b'], fc['eps_beta'])
 
 		for layer in self.layers[0 : self.div_ind]:
-			layer.update(eps_w, eps_b, fc['mu'], fc['w_beta'])
+			layer.update(fc['eps_w'], fc['eps_b'], fc['mu'], fc['w_beta'])
 
-		i = min(conv['eps_sat'], itr)
-		eps_w = eps_decay(i, conv['eps_w'], conv['eps_beta'])
-		eps_b = eps_decay(i, conv['eps_b'], conv['eps_beta'])
+		#i = min(conv['eps_sat'], itr)
+		#eps_w = eps_decay(i, conv['eps_w'], conv['eps_beta'])
+		#eps_b = eps_decay(i, conv['eps_b'], conv['eps_beta'])
 
 		for layer in self.layers[self.div_ind:]:
-			layer.update(eps_w, eps_b, conv['mu'], conv['w_beta'])
+			layer.update(conv['eps_w'], conv['eps_b'], conv['mu'], conv['w_beta'])
 
 
 	def classify(self, prediction):
@@ -426,10 +451,10 @@ def testMnist():
 	print "Loading MNIST images..."
 	data = np.load('data/cnnMnist.npz')
 	#Store data in this shape.
-	train_data = data['train_data'].reshape(55000, 28, 28, 1)
+	train_data = data['train_data'][0:10000].reshape(10000, 28, 28, 1)
 	valid_data = data['valid_data'].reshape(5000, 28, 28, 1)
 	test_data = data['test_data'].reshape(10000, 28, 28, 1)
-	train_label = data['train_label']
+	train_label = data['train_label'][0:10000]
 	valid_label = data['valid_label']
 	test_label = data['test_label']
 
@@ -438,96 +463,39 @@ def testMnist():
 	print "Initializing network..."
 	layers = {
 		"fc":[
-				PerceptronLayer(10, 150, 0.9, 'softmax'),
-				PerceptronLayer(150, 256, 0.8, init_b=1)
+				PerceptronLayer(10, 150, outputType='softmax'),
+				PerceptronLayer(150, 256, "tanh")
 			],
 		#Size of output maps from conv layer MUST EQUAL size of input maps to fc layer.
 		"conv":[
-				PoolLayer((2, 2), 'max'),
-				ConvLayer(16, 6, (5,5), init_b=1),
-				PoolLayer((2, 2), 'max'),
-				ConvLayer(6, 1, (5,5))
+				PoolLayer((2, 2)),
+				ConvLayer(16, 6, (5,5), "tanh"),
+				PoolLayer((2, 2)),
+				ConvLayer(6, 1, (5,5), "tanh")
 			]
 	}
 
 	params = {
 
-		'epochs': 30,
-		'batch_size': 128,
+		'epochs': 100,
+		'batch_size': 10000,
 
 		'fc':{
-			'eps_w': 0.2,
-			'eps_b': 0.2,
-			'eps_beta': 0.01,
-			'eps_sat': 1000,
-			'mu': 0.9,
-			'w_beta': 0.0005
+			'eps_w': 0.1,
+			'eps_b': 0.1,
+			'eps_beta': 0,
+			'eps_sat': 0,
+			'mu': 0,
+			'w_beta': 0
 		},
 
 		'conv':{
-			'eps_w': 0.2,
-			'eps_b': 0.2,
-			'eps_beta': 0.05,
-			'eps_sat': 1000,
-			'mu': 0.9,
-			'w_beta': 0.0005
-		}
-	}
-
-	cnn = Cnn(layers)
-	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
-
-
-def testCifar10():
-	"""
-	Test the cnn using the CIFAR-10 dataset.
-	"""
-
-	print "Loading CIFAR-10 images..."
-	data = np.load('data/cifar10.npz')
-	train_data, valid_data, test_data = data['train_data'][:50000], data['train_data'][50001:], data['test_data']
-	train_label, valid_label, test_label = data['train_label'][:50000], data['train_label'][50001:], data['test_label']
-
-	#Center images.
-
-	print "Initializing network..."
-
-	layers = {
-		"fc":[
-				PerceptronLayer(10, 1000, 0.9, 'softmax', init_w=0.5),
-				PerceptronLayer(10, 1000, 0.8, init_w=0.5, init_b=1)
-			],
-		#Size of output maps from conv layer MUST EQUAL size of input maps to fc layer.
-		"conv":[
-				ConvLayer(160, 64, (5, 5), init_w=0.05, init_b=1),
-				PoolLayer((2, 2), 'max'),
-				ConvLayer(96, 64, (5, 5), init_w=0.05, init_b=1),
-				PoolLayer((2, 2), 'max'),
-				ConvLayer(64, 3, (5, 5))
-			]
-	}
-
-	params = {
-
-		'epochs': 30,
-		'batch_size': 128,
-
-		'fc':{
-			'eps_w': 0.17,
-			'eps_b': 0.17,
-			'eps_beta': 0.01,
-			'eps_sat': 1000,
-			'mu': 0.9,
-			'w_beta': 0.0005
-		},
-
-		'conv':{
-			'eps_w': 0.17,
-			'eps_b': 0.17,
-			'eps_beta': 0.01,
-			'eps_sat': 1000,
-			'mu': 0.9,
-			'w_beta': 0.0005
+			'eps_w': 0.1,
+			'eps_b': 0.1,
+			'eps_beta': 0,
+			'eps_sat': 0,
+			'mu': 0,
+			'w_beta': 0
 		}
 	}
 
@@ -537,5 +505,5 @@ def testCifar10():
 
 if __name__ == '__main__':
 
-	#testMnist()
-	testCifar10()
+	testMnist()
+	#testCifar10()
