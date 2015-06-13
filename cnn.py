@@ -16,6 +16,7 @@ import numpy as np
 import theano as thn
 import theano.tensor as tn
 import theano.tensor.nnet.conv as conv
+import matplotlib.pyplot as plt
 from theano.tensor.signal.downsample import max_pool_2d as max_pool
 from theano.tensor.signal.downsample import max_pool_2d_same_size as max_pool_same
 from skimage.transform import downscale_local_mean as downsample
@@ -103,7 +104,7 @@ class PoolLayer():
 			return np.kron(dEdo, np.ones(self.factor)) * (1.0 / np.prod(self.factor))
 			
 
-	def update(self, eps, mu):
+	def update(self, eps_w, eps_b, mu):
 		"""
 		Update the weights in this layer.
 
@@ -194,17 +195,17 @@ class ConvLayer():
 		return fastConv2d(dEds, rot2d90(kernels, 2), 'full')
 
 
-	def update(self, eps, mu):
+	def update(self, eps_w, eps_b, mu):
 		"""
 		Update the weights in this layer.
 
 		Args:
 		-----
-			eps: Learning rate.
+			eps_w, eps_b: Learning rates for the weights and biases.
 			mu: Momentum coefficient.
 		"""
-		self.v_w = (mu * self.v_w) - (eps * self.dEdw)
-		self.v_b = (mu * self.v_b) - (eps * self.dEdb)
+		self.v_w = (mu * self.v_w) - (eps_w * self.dEdw)
+		self.v_b = (mu * self.v_b) - (eps_b * self.dEdb)
 		self.kernels = self.kernels + self.v_w
 		self.bias = self.bias + self.v_b
 
@@ -246,9 +247,9 @@ class Cnn():
 		-----
 			layers: Dict. of fully connected and convolutional layers arranged heirarchically.
 		"""
-		self.layers = deepcopy(layers["fully-connected"]) + deepcopy(layers["convolutional"])
+		self.layers = deepcopy(layers["fc"]) + deepcopy(layers["conv"])
 		self.div_x_shape = None
-		self.div_ind = len(layers["fully-connected"])
+		self.div_ind = len(layers["fc"])
 
 
 	def train(self, train_data, train_label, valid_data, valid_label, test_data, test_label, params):
@@ -270,30 +271,71 @@ class Cnn():
 		for layer in self.layers[0 : self.div_ind]:
 			layer.train = True
 
-		for i in xrange(60):
+		#Check the parameters
 
-			pred = self.predict(train_data)
-			label = train_label
+		print "Training network..."
+		plt.ion()
+		N, itrs, train_errors, valid_errors = train_data.shape[0], 0, [], []
 
-			self.backprop(pred - label) #Start differentation. Note: dw = w - lr * dEdw.
+		for epoch in xrange(params['epochs']):
+
+			avg_train_errors, avg_valid_errors = [], []
+
+			start, stop = range(0, N, params['batch_size']), range(params['batch_size'], N, params['batch_size'])
+
+			for i, j in zip(start, stop):
+
+				pred = self.predict(train_data[i:j])
+				self.backprop(pred - train_label[i:j])
+				self.update(params)
+
+				tc, vc  = self.classify(pred), self.classify(self.predict(valid_data))
+				ce_train, ce_valid = mce(tc, train_label[i:j]), mce(vc, valid_label)
+
+				print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrs, ce_train, ce_valid)
+				if epoch != 0 and epoch % 100 == 0:
+  					print '--------------------------------------------------------------------------------'
+
+
+  				itrs = itrs + 1
+  				avg_train_errors.append(ce_train)
+  				avg_valid_errors.append(ce_valid)
+
+  			i = start[-1]
+  			pred = self.predict(train_data[i:])
+			self.backprop(pred - train_label[i:])
 			self.update(params)
 
-			train_clfn = self.classify(pred)
-			valid_clfn = self.classify(self.predict(valid_data))
+			tc, vc  = self.classify(pred), self.classify(self.predict(valid_data))
+			ce_train, ce_valid = mce(tc, train_label[i:]), mce(vc, valid_label)
 
-			train_ce, valid_ce = mce(train_clfn, label), mce(valid_clfn, valid_label)
+			print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrs, ce_train, ce_valid)
+			if epoch != 0 and epoch % 100 == 0:
+  				print '--------------------------------------------------------------------------------'
 
-			print '\rIteration:' + "{:10.2f}".format(i) + ' Train MCE:' + "{:10.2f}".format(train_ce) + ' Valid MCE:' + "{:10.2f}".format(valid_ce)
-			if i != 0 and i % 100 == 0:
-  				print '\n'
+  			itrs = itrs + 1
+  			avg_train_errors.append(ce_train)
+  			avg_valid_errors.append(ce_valid)
+
+  			plt.show()
+  			train_errors.append(np.average(avg_train_errors))
+  			valid_errors.append(np.average(avg_valid_errors))
+  			plt.xlabel('Epochs')
+  			plt.ylabel('Train (green) and Valid (blue) mce')
+  			plt.plot(range(epoch + 1), train_errors, '-g')
+  			plt.plot(range(epoch + 1), valid_errors, '-b')
+  			plt.axis([0, params['epochs'], 0, 1.00])
+  			plt.draw() #Add fucking legend later.
 
   		#Stop fc dropout after training.
 		for layer in self.layers[0 : self.div_ind]:
 			layer.train = False
+		plt.ioff()
 
-  		test_clfn = self.classify(self.predict(test_data))
-  		test_ce = mce(test_clfn, test_label)
-  		print '\rTest MCE:' + "{:10.2f}".format(test_ce)
+  		tc = self.classify(self.predict(test_data))
+  		print '\nTest mce: {:.2f}'.format(mce(tc, test_label))
+
+  		#After training, save network architecture.
 
 
 	def backprop(self, dE):
@@ -351,8 +393,13 @@ class Cnn():
 		-----
 			params: Training parameters.
 		"""
-		for layer in self.layers:
-			layer.update(params['eps'], params['mu'])
+		fc, conv = params['fc'], params['conv']
+
+		for layer in self.layers[0 : self.div_ind]:
+			layer.update(fc['eps_w'], fc['eps_b'], fc['mu'])
+
+		for layer in self.layers[self.div_ind:]:
+			layer.update(conv['eps_w'], conv['eps_b'], conv['mu'])
 
 
 	def classify(self, prediction):
@@ -393,14 +440,90 @@ def testMnist():
 	test_label = data['test_label']
 
 	print "Initializing network..."
+	# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
 	layers = {
-		"fully-connected": [PerceptronLayer(10, 150, 0.9, "softmax"), PerceptronLayer(150, 256, 0.8, 'tanh')],
-		# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
-		"convolutional": [PoolLayer((2, 2), 'max'), ConvLayer(16, 6, (5,5)), PoolLayer((2, 2), 'max'), ConvLayer(6, 1, (5,5))]
+		"fc":[
+				PerceptronLayer(10, 150, 0.9, "softmax"),
+				PerceptronLayer(150, 256, 0.8, 'tanh')
+			],
+		"conv":[
+				PoolLayer((2, 2), 'max'),
+				ConvLayer(16, 6, (5,5)),
+				PoolLayer((2, 2), 'max'),
+				ConvLayer(6, 1, (5,5))
+			]
 	}
+
+	params = {
+		'epochs': 20,
+		'batch_size': 1,
+
+		'fc':{
+			'eps_w': 0.1,
+			'eps_b': 0.1,
+			'mu': 0.6
+		},
+
+		'conv': {
+			'eps_w': 0.1,
+			'eps_b': 0.1,
+			'mu': 0.6
+		}
+	}
+
 	cnn = Cnn(layers)
-	print "Training network..."
-	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, {'eps': 0.1, 'mu': 0.6})
+	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
+
+
+def testCifar10():
+	"""
+	Test the cnn using the CIFAR-10 dataset.
+	"""
+
+	print "Loading CIFAR-10 images..."
+	data = np.load('data/cifar10.npz')
+	train_data = data['train_data'][0:10000]
+	valid_data = data['train_data'][10000:10500]
+	test_data = data['test_data']
+	train_label = data['train_label'][0:10000]
+	valid_label = data['train_label'][10000:10500]
+	test_label = data['test_label']
+
+	print "Initializing network..."
+	# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
+	layers = {
+		"fc":[
+				PerceptronLayer(10, 64, 0.5, "softmax", init_w=0.1),
+				PerceptronLayer(64, 64, 0.5, 'relu', init_w=0.1)
+			],
+		"conv":[
+				ConvLayer(64, 32, (5,5)),
+				PoolLayer((2, 2), 'avg'),
+				ConvLayer(32, 32, (5,5)),
+				PoolLayer((2, 2), 'max'),
+				ConvLayer(32, 3, (5,5), init_w=0.0001)
+				]
+	}
+
+	params = {
+		'epochs': 20,
+		'batch_size': 500,
+
+		'fc':{
+			'eps_w': 0.001,
+			'eps_b': 0.002,
+			'mu': 0.9
+		},
+
+		'conv': {
+			'eps_w': 0.001,
+			'eps_b': 0.002,
+			'mu': 0.9
+		}
+	}
+
+	cnn = Cnn(layers)
+	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
 
 
 

@@ -114,6 +114,10 @@ def mce(preds, labels):
     """
     N, l = labels.shape
 
+    if preds.shape != labels.shape:
+    	print "Mce Error: Inputs unequal."
+    	return None
+
     if l == 1:
     	return 1.0 - np.average(np.where(preds == labels, 1, 0))
     else:
@@ -179,17 +183,17 @@ class PerceptronLayer():
 		return np.dot(dEds.T, self.w).T * self.dropped #dEdx
 
 
-	def update(self, eps, mu):
+	def update(self, eps_w, eps_b, mu):
 		"""
 		Update the weights in this layer.
 
 		Args:
 		-----
-			eps: Learning rate.
+			eps_w, eps_b: Learning rates for the weights and biases.
 			mu: Momentum coefficient.
 		"""
-		self.v_w = (mu * self.v_w) - (eps * self.dEdw)
-		self.v_b = (mu * self.v_b) - (eps * self.dEdb)
+		self.v_w = (mu * self.v_w) - (eps_w * self.dEdw)
+		self.v_b = (mu * self.v_b) - (eps_b * self.dEdb)
 		self.w = self.w + self.v_w
 		self.b = self.b + self.v_b
 
