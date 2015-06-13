@@ -79,6 +79,29 @@ def relu(data):
 	return np.maximum(data, 0)
 
 
+def epsilon_decay(eps, phi, satr, itr, intvl):
+	"""
+	Decay the given learn rate given.
+
+	Args:
+	-----
+		eps: Learning rate.
+		phi: Learning decay.
+		satr: Iteration to saturate learning rate or string 'Inf'.
+		itr: Current iteration.
+		intvl: Decay interval i.e 0 (constant), 1 (progressive) etc.
+
+	Returns:
+	--------
+		The learning rate to apply.
+	"""
+	if intvl != 0:
+		i = min(itr, float(satr)) / intvl
+		return eps / (1.0 + (i * phi))
+	else:
+		return eps
+
+
 def cross_entropy(preds, labels):
     """
     Compute the cross entropy over the predictions.

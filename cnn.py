@@ -288,7 +288,7 @@ class Cnn():
 
 				pred = self.predict(train_data[i:j])
 				self.backprop(pred - train_label[i:j])
-				self.update(params)
+				self.update(params, itrs)
 
 				tc, vc  = self.classify(pred), self.classify(self.predict(valid_data))
 				ce_train, ce_valid = mce(tc, train_label[i:j]), mce(vc, valid_label)
@@ -305,7 +305,7 @@ class Cnn():
   			i = start[-1]
   			pred = self.predict(train_data[i:])
 			self.backprop(pred - train_label[i:])
-			self.update(params)
+			self.update(params, itrs)
 
 			tc, vc  = self.classify(pred), self.classify(self.predict(valid_data))
 			ce_train, ce_valid = mce(tc, train_label[i:]), mce(vc, valid_label)
@@ -386,7 +386,7 @@ class Cnn():
 		return data.T
 
 
-	def update(self, params):
+	def update(self, params, i):
 		"""
 		Update the network weights.
 
@@ -396,11 +396,17 @@ class Cnn():
 		"""
 		fc, conv = params['fc'], params['conv']
 
+		eps_w = epsilon_decay(fc['eps_w'], fc['eps_decay'], fc['eps_satr'], i, fc['eps_intvl'])
+		eps_b = epsilon_decay(fc['eps_b'], fc['eps_decay'], fc['eps_satr'], i, fc['eps_intvl'])
+
 		for layer in self.layers[0 : self.div_ind]:
-			layer.update(fc['eps_w'], fc['eps_b'], fc['mu'], fc['l2'])
+			layer.update(eps_w, eps_b, fc['mu'], fc['l2'])
+
+		eps_w = epsilon_decay(conv['eps_w'], conv['eps_decay'], conv['eps_satr'], i, conv['eps_intvl'])
+		eps_b = epsilon_decay(conv['eps_b'], conv['eps_decay'], conv['eps_satr'], i, conv['eps_intvl'])
 
 		for layer in self.layers[self.div_ind:]:
-			layer.update(conv['eps_w'], conv['eps_b'], conv['mu'], conv['l2'])
+			layer.update(eps_w, eps_b, conv['mu'], conv['l2'])
 
 
 	def classify(self, prediction):
@@ -462,6 +468,9 @@ def testMnist():
 		'fc':{
 			'eps_w': 0.1,
 			'eps_b': 0.1,
+			'eps_decay': 0.5,
+			'eps_intvl': 0,
+			'eps_satr': 'inf',
 			'mu': 0.6,
 			'l2': 0
 		},
@@ -469,6 +478,9 @@ def testMnist():
 		'conv': {
 			'eps_w': 0.1,
 			'eps_b': 0.1,
+			'eps_decay': 0.5,
+			'eps_intvl': 0,
+			'eps_satr': 'inf',
 			'mu': 0.6,
 			'l2': 0
 		}
@@ -515,6 +527,9 @@ def testCifar10():
 		'fc':{
 			'eps_w': 0.001,
 			'eps_b': 0.002,
+			'eps_decay': 9,
+			'eps_intvl': 160,
+			'eps_satr': 'inf',
 			'mu': 0.9,
 			'l2': 0.03
 		},
@@ -522,6 +537,9 @@ def testCifar10():
 		'conv': {
 			'eps_w': 0.001,
 			'eps_b': 0.002,
+			'eps_decay': 9,
+			'eps_intvl': 160,
+			'eps_satr': 'inf',
 			'mu': 0.9,
 			'l2': 0.004
 		}
