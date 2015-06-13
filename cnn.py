@@ -16,8 +16,6 @@ import numpy as np
 import theano as thn
 import theano.tensor as tn
 import theano.tensor.nnet.conv as conv
-import matplotlib.pyplot as plt
-import random as rand
 from theano.tensor.signal.downsample import max_pool_2d as max_pool
 from theano.tensor.signal.downsample import max_pool_2d_same_size as max_pool_same
 from skimage.transform import downscale_local_mean as downsample
@@ -34,7 +32,6 @@ def fastConv2d(data, kernel, convtype='valid'):
 	-----
 		data: A N x l x m2 x n2 array.
 		kernel: An k x l x m1 x n1 array.
-		convtype: String repr. type of convolution i.e 'valid' or 'full'.
 
 	Returns:
 	--------
@@ -75,16 +72,16 @@ class PoolLayer():
 	A pooling layer.
 	"""
 
-	def __init__(self, factor, pool_type='avg'):
+	def __init__(self, factor, poolType='avg'):
 		"""
 		Initialize the pooling layer.
 
 		Args:
 		-----
 			factor: Tuple repr. pooling factor.
-			ptype: String repr. the pooling type i.e 'avg' or 'max'.
+			poolType: String repr. the pooling type i.e 'avg' or 'max'.
 		"""
-		self.type, self.factor, self.grad = pool_type, factor, None
+		self.type, self.factor, self.grad = poolType, factor, None
 
 
 	def bprop(self, dEdo):
@@ -106,16 +103,13 @@ class PoolLayer():
 			return np.kron(dEdo, np.ones(self.factor)) * (1.0 / np.prod(self.factor))
 			
 
-	def update(self, eps_w, eps_b, mu, beta):
+	def update(self, lr):
 		"""
 		Update the weights in this layer.
 
 		Args:
 		-----
-			eps_w: Learning rate for kernels.
-			eps_b: Learning rate for bias.
-			mu: Momentum coefficient.
-			beta: Weight decay coefficient.
+			lr: Learning rate.
 		"""
 		pass #Nothing to do here :P
 
@@ -137,14 +131,15 @@ class PoolLayer():
 			f = thn.function([x], max_pool(x, self.factor))
 			g = thn.function([x], max_pool_same(x, self.factor))
 			self.grad = g(data + 0.0000000001) / (data + 0.0000000001) #Pick up max inactive units.
+			self.grad[np.where(np.isnan(self.grad))] = 0
 			return f(data)
-
-		return downsample(data, (1, 1, self.factor[0], self.factor[1]))
+		else:
+			return downsample(data, (1, 1, self.factor[0], self.factor[1]))
 
 
 class ConvLayer():
 	"""
-	A convolutional layer.
+	A Convolutional layer.
 	"""
 
 	def __init__(self, k, l, ksize, outputType='relu', init_w=0.01, init_b=0):
@@ -156,24 +151,23 @@ class ConvLayer():
 			k: No. feature maps in layer.
 			l: No. input planes in layer or no. channels in input image.
 			ksize: Tuple repr. the size of a kernel.
-			outputType: Type of output i.e 'relu', 'tanh' or 'sigmoid'.
-			init_w: Std dev of initial weights drawn from a Gauss distro.
+			outputType: String repr. type of non-linear activation i.e 'relu', 'tanh' or 'sigmoid'.
+			init_w: Std dev of initial weights drawn from a std Normal distro.
 			init_b: Initial value of biases.
 		"""
 		self.o_type = outputType
 		self.kernels = init_w * np.random.randn(k, l, ksize[0], ksize[1])
 		self.bias = init_b * np.ones((k, 1, 1))
-		#self.v_w, self.v_b = 0, 0
 
 
 	def bprop(self, dEdo):
 		"""
-		Compute error gradients and return sum of errors from the output
+		Compute error gradients and return sum of error from output down
 		to this layer.
 
 		Args:
 		-----
-			dEdo: A N x k x m1 x n1 array of errors from prev layers.
+			dEdo: A N x k x m2 x n2 array of errors from prev layers.
 
 		Returns:
 		-------
@@ -196,26 +190,19 @@ class ConvLayer():
 
 		#Correlate
 		dEds, kernels = np.swapaxes(dEds, 0, 1), np.swapaxes(self.kernels, 0, 1)
-		self.dEdx = fastConv2d(dEds, rot2d90(kernels, 2), 'full')
-
-		return self.dEdx
+		return fastConv2d(dEds, rot2d90(kernels, 2), 'full')
 
 
-	def update(self, eps_w, eps_b, mu, beta):
+	def update(self, lr):
 		"""
 		Update the weights in this layer.
 
 		Args:
 		-----
-			eps_w: Learning rate for kernels.
-			eps_b: Learning rate for bias.
-			mu: Momentum coefficient.
-			beta: Weight decay coefficient.
+			lr: Learning rate.
 		"""
-		#self.v_w = (self.v_w * mu) - (eps_w * beta * self.kernels) - (eps_w * self.dEdw)
-		#self.v_b = (self.v_b * mu) - (eps_b * beta * self.bias) - (eps_b * self.dEdb)
-		self.kernels = self.kernels - (eps_w * self.dEdw)
-		self.bias = self.bias - (eps_b * self.dEdb)
+		self.kernels = self.kernels - (lr * self.dEdw)
+		self.bias = self.bias - (lr * self.dEdb)
 
 
 	def feedf(self, data):
@@ -231,14 +218,13 @@ class ConvLayer():
 			A N x k x m2 x n2 array of output plains.
 		"""
 		self.x = data
-		N, l, m1, n1 = self.x.shape
 		self.maps = fastConv2d(self.x, self.kernels)
 
-		if self.o_type == 'sigmoid':
-			return sigmoid(self.maps + self.bias)
-		elif self.o_type == 'tanh':
+		if self.o_type == 'tanh':
 			return np.tanh(self.maps + self.bias)
-		
+		elif self.o_type == 'sigmoid':
+			return sigmoid(self.maps + self.bias)
+
 		return relu(self.maps + self.bias)
 
 
@@ -255,9 +241,9 @@ class Cnn():
 		-----
 			layers: Dict. of fully connected and convolutional layers arranged heirarchically.
 		"""
-		self.layers = deepcopy(layers['fc']) + deepcopy(layers['conv'])
+		self.layers = deepcopy(layers["fully-connected"]) + deepcopy(layers["convolutional"])
 		self.div_x_shape = None
-		self.div_ind = len(layers['fc'])
+		self.div_ind = len(layers["fully-connected"])
 
 
 	def train(self, train_data, train_label, valid_data, valid_label, test_data, test_label, params):
@@ -274,78 +260,27 @@ class Cnn():
 			test_label	:	k x no_imgs binary array of image class labels.
 			params 		:	A dictionary of training parameters.
 		"""
-		#Start training: notify fc layers.
-		#for fcl in self.layers[0 : self.div_ind]:
-		#	fcl.train = True
 
-		#Check the parameters
+		for i in xrange(80):
 
-		print "Training network..."
-		plt.ion()
-		N, itrs, train_errors, valid_errors = train_data.shape[0], 0, [], []
+			pred = self.predict(train_data)
+			label = train_label
 
-		for epoch in xrange(params['epochs']):
+			self.backprop(pred - label) #Start differentation. Note: dw = w - lr * dEdw.
+			self.update(params)
 
-			avg_train_errors, avg_valid_errors = [], []
+			train_clfn = self.classify(pred)
+			valid_clfn = self.classify(self.predict(valid_data))
 
-			start, stop = range(0, N, params['batch_size']), range(params['batch_size'], N, params['batch_size'])
+			train_ce, valid_ce = mce(train_clfn, label), mce(valid_clfn, valid_label)
 
-			for i, j in zip(start, stop):
+			print '\rIteration:' + "{:10.2f}".format(i) + ' Train MCE:' + "{:10.2f}".format(train_ce) + ' Valid MCE:' + "{:10.2f}".format(valid_ce)
+			if i != 0 and i % 100 == 0:
+  				print '\n'
 
-				pred = self.predict(train_data[i:j])
-				self.backprop(pred - train_label[i:j])
-				self.update(params, itrs)
-
-				tc, vc  = self.classify(pred), self.classify(self.predict(valid_data))
-				ce_train, ce_valid = mce(tc, train_label[i:j]), mce(vc, valid_label)
-
-				print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrs, ce_train, ce_valid)
-				if epoch != 0 and epoch % 100 == 0:
-  					print '--------------------------------------------------------------------------------'
-
-
-  				itrs = itrs + 1
-  				avg_train_errors.append(ce_train)
-  				avg_valid_errors.append(ce_valid)
-
-  			i = start[-1]
-  			pred = self.predict(train_data[i:])
-			self.backprop(pred - train_label[i:])
-			self.update(params, itrs)
-
-			tc, vc  = self.classify(pred), self.classify(self.predict(valid_data))
-			ce_train, ce_valid = mce(tc, train_label[i:]), mce(vc, valid_label)
-
-			print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrs, ce_train, ce_valid)
-			if epoch != 0 and epoch % 100 == 0:
-  				print '--------------------------------------------------------------------------------'
-
-  			itrs = itrs + 1
-  			avg_train_errors.append(ce_train)
-  			avg_valid_errors.append(ce_valid)
-
-  			plt.show()
-  			train_errors.append(np.average(avg_train_errors))
-  			valid_errors.append(np.average(avg_valid_errors))
-  			plt.xlabel('Epochs')
-  			plt.ylabel('Train (green) and Valid (blue) mce')
-  			plt.plot(range(epoch + 1), train_errors, '-g')
-  			plt.plot(range(epoch + 1), valid_errors, '-b')
-  			plt.axis([0, params['epochs'], 0, 1.00])
-  			plt.draw() #Add fucking legend later.
-
-  		#End training: notify fc layers.
-  		#for fcl in self.layers[0 : self.div_ind]:
-		#	fcl.train = False
-		plt.ioff()
-
-		#Test time.
-  		tc = self.classify(self.predict(test_data))
-  		print '\nTest mce: {:.2f}'.format(mce(tc, test_label))
-
-  		#Plot a graph of the training process
-
-  		#After training, save network architecture.
+  		test_clfn = self.classify(self.predict(test_data))
+  		test_ce = mce(test_clfn, test_label)
+  		print '\rTest MCE:' + "{:10.2f}".format(test_ce)
 
 
 	def backprop(self, dE):
@@ -360,7 +295,7 @@ class Cnn():
 		for layer in self.layers[0 : self.div_ind]:
 			error = layer.bprop(error)
 
-		N, k, m, n = self.div_x_shape
+		N, k, m, n = self.div_x_shape #Reshape output from fully-connected layer.
 		error = error.T.reshape(N, k, m, n)
 
 		for layer in self.layers[self.div_ind:]:
@@ -380,12 +315,13 @@ class Cnn():
 		-------
 			A no_imgs x k_classes array.
 		"""
+		#Transform 4d array into N, no.input_planes, img_length, img_width array
 		data = np.transpose(imgs, (0, 3, 1, 2))
 
 		for i in xrange(len(self.layers) - 1, self.div_ind - 1, -1):
 			data = self.layers[i].feedf(data)
 
-		self.div_x_shape = data.shape
+		self.div_x_shape = data.shape #Reshape output of convolutional layer.
 		data = data.reshape(data.shape[0], np.prod(data.shape[1:])).T
 
 		for i in xrange(self.div_ind - 1, -1, -1):
@@ -394,30 +330,16 @@ class Cnn():
 		return data.T
 
 
-	def update(self, params, itr=0):
+	def update(self, params):
 		"""
 		Update the network weights.
 
 		Args:
 		-----
 			params: Training parameters.
-			itr: Current iteration.
 		"""
-		fc, conv = params['fc'], params['conv']
-
-		#i = min(fc['eps_sat'], itr)
-		#eps_w = eps_decay(i, fc['eps_w'], fc['eps_beta'])
-		#eps_b = eps_decay(i, fc['eps_b'], fc['eps_beta'])
-
-		for layer in self.layers[0 : self.div_ind]:
-			layer.update(fc['eps_w'], fc['eps_b'], fc['mu'], fc['w_beta'])
-
-		#i = min(conv['eps_sat'], itr)
-		#eps_w = eps_decay(i, conv['eps_w'], conv['eps_beta'])
-		#eps_b = eps_decay(i, conv['eps_b'], conv['eps_beta'])
-
-		for layer in self.layers[self.div_ind:]:
-			layer.update(conv['eps_w'], conv['eps_b'], conv['mu'], conv['w_beta'])
+		for layer in self.layers:
+			layer.update(params['learn_rate'])
 
 
 	def classify(self, prediction):
@@ -450,57 +372,23 @@ def testMnist():
 
 	print "Loading MNIST images..."
 	data = np.load('data/cnnMnist.npz')
-	#Store data in this shape.
-	train_data = data['train_data'][0:10000].reshape(10000, 28, 28, 1)
-	valid_data = data['valid_data'].reshape(5000, 28, 28, 1)
+	train_data = data['train_data'][0:1000].reshape(1000, 28, 28, 1)
+	valid_data = data['valid_data'][0:1000].reshape(1000, 28, 28, 1)
 	test_data = data['test_data'].reshape(10000, 28, 28, 1)
-	train_label = data['train_label'][0:10000]
-	valid_label = data['valid_label']
+	train_label = data['train_label'][0:1000]
+	valid_label = data['valid_label'][0:1000]
 	test_label = data['test_label']
-
-	#Center images
 
 	print "Initializing network..."
 	layers = {
-		"fc":[
-				PerceptronLayer(10, 150, outputType='softmax'),
-				PerceptronLayer(150, 256, "tanh")
-			],
-		#Size of output maps from conv layer MUST EQUAL size of input maps to fc layer.
-		"conv":[
-				PoolLayer((2, 2)),
-				ConvLayer(16, 6, (5,5), "tanh"),
-				PoolLayer((2, 2)),
-				ConvLayer(6, 1, (5,5), "tanh")
-			]
+		"fully-connected": [PerceptronLayer(10, 150, "softmax"), PerceptronLayer(150, 256, 'tanh')],
+		# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
+		"convolutional": [PoolLayer((2, 2), 'max'), ConvLayer(16, 6, (5,5)), PoolLayer((2, 2), 'max'), ConvLayer(6, 1, (5,5))]
 	}
-
-	params = {
-
-		'epochs': 100,
-		'batch_size': 10000,
-
-		'fc':{
-			'eps_w': 0.1,
-			'eps_b': 0.1,
-			'eps_beta': 0,
-			'eps_sat': 0,
-			'mu': 0,
-			'w_beta': 0
-		},
-
-		'conv':{
-			'eps_w': 0.1,
-			'eps_b': 0.1,
-			'eps_beta': 0,
-			'eps_sat': 0,
-			'mu': 0,
-			'w_beta': 0
-		}
-	}
-
 	cnn = Cnn(layers)
-	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
+	print "Training network..."
+	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, {'learn_rate': 0.1})
+
 
 
 if __name__ == '__main__':
