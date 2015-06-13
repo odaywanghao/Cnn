@@ -103,20 +103,20 @@ class PoolLayer():
 			return np.kron(dEdo, np.ones(self.factor)) * (1.0 / np.prod(self.factor))
 			
 
-	def update(self, lr):
+	def update(self, eps, mu):
 		"""
 		Update the weights in this layer.
 
 		Args:
 		-----
-			lr: Learning rate.
+			eps: Learning rate.
 		"""
 		pass #Nothing to do here :P
 
 
 	def feedf(self, data):
 		"""
-		Perform a forward pass on the input data.
+		Pool features within a given receptive from the input data.
 
 		Args:
 		-----
@@ -158,6 +158,7 @@ class ConvLayer():
 		self.o_type = outputType
 		self.kernels = init_w * np.random.randn(k, l, ksize[0], ksize[1])
 		self.bias = init_b * np.ones((k, 1, 1))
+		self.v_w, self.v_b = 0, 0
 
 
 	def bprop(self, dEdo):
@@ -193,21 +194,25 @@ class ConvLayer():
 		return fastConv2d(dEds, rot2d90(kernels, 2), 'full')
 
 
-	def update(self, lr):
+	def update(self, eps, mu):
 		"""
 		Update the weights in this layer.
 
 		Args:
 		-----
-			lr: Learning rate.
+			eps: Learning rate.
+			mu: Momentum coefficient.
 		"""
-		self.kernels = self.kernels - (lr * self.dEdw)
-		self.bias = self.bias - (lr * self.dEdb)
+		self.v_w = (mu * self.v_w) - (eps * self.dEdw)
+		self.v_b = (mu * self.v_b) - (eps * self.dEdb)
+		self.kernels = self.kernels + self.v_w
+		self.bias = self.bias + self.v_b
 
 
 	def feedf(self, data):
 		"""
-		Perform a forward pass on the input data.
+		Return the non-linear result of convolving the input data with the
+		weights in this layer.
 
 		Args:
 		-----
@@ -261,7 +266,11 @@ class Cnn():
 			params 		:	A dictionary of training parameters.
 		"""
 
-		for i in xrange(80):
+		#Notify fc of training.
+		for layer in self.layers[0 : self.div_ind]:
+			layer.train = True
+
+		for i in xrange(60):
 
 			pred = self.predict(train_data)
 			label = train_label
@@ -277,6 +286,10 @@ class Cnn():
 			print '\rIteration:' + "{:10.2f}".format(i) + ' Train MCE:' + "{:10.2f}".format(train_ce) + ' Valid MCE:' + "{:10.2f}".format(valid_ce)
 			if i != 0 and i % 100 == 0:
   				print '\n'
+
+  		#Stop fc dropout after training.
+		for layer in self.layers[0 : self.div_ind]:
+			layer.train = False
 
   		test_clfn = self.classify(self.predict(test_data))
   		test_ce = mce(test_clfn, test_label)
@@ -339,7 +352,7 @@ class Cnn():
 			params: Training parameters.
 		"""
 		for layer in self.layers:
-			layer.update(params['learn_rate'])
+			layer.update(params['eps'], params['mu'])
 
 
 	def classify(self, prediction):
@@ -381,13 +394,13 @@ def testMnist():
 
 	print "Initializing network..."
 	layers = {
-		"fully-connected": [PerceptronLayer(10, 150, "softmax"), PerceptronLayer(150, 256, 'tanh')],
+		"fully-connected": [PerceptronLayer(10, 150, 0.9, "softmax"), PerceptronLayer(150, 256, 0.8, 'tanh')],
 		# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
 		"convolutional": [PoolLayer((2, 2), 'max'), ConvLayer(16, 6, (5,5)), PoolLayer((2, 2), 'max'), ConvLayer(6, 1, (5,5))]
 	}
 	cnn = Cnn(layers)
 	print "Training network..."
-	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, {'learn_rate': 0.1})
+	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, {'eps': 0.1, 'mu': 0.6})
 
 
 

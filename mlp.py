@@ -125,7 +125,7 @@ class PerceptronLayer():
 	A perceptron layer.
 	"""
 
-	def __init__(self, no_outputs, no_inputs, outputType='relu', init_w=0.01, init_b=0):
+	def __init__(self, no_outputs, no_inputs, prob=1, outputType='relu', init_w=0.01, init_b=0):
 		"""
 		Initialize fully connected layer.
 
@@ -133,7 +133,10 @@ class PerceptronLayer():
 		-----
 			no_outputs: No. output classes.
 			no_inputs: No. input features.
-			outputType: Type of output ('sum', 'sigmoid', 'tanh', 'relu' or 'softmax')
+			prob: Prob. of a neuron being present during dropout.
+			outputType: String repr. type of output i.e 'sum', 'sigmoid', 'tanh', 'relu' or 'softmax'.
+			init_w: Std dev of initial weights drawn from a std Normal distro.
+			init_b: Initial value of biases.
 		"""
 		self.o_type = outputType
 		if outputType == 'sigmoid' or outputType == 'tanh':
@@ -141,6 +144,8 @@ class PerceptronLayer():
 		else:
 			self.w = init_w * np.random.randn(no_outputs, no_inputs)
 		self.b = init_b * np.ones((no_outputs, 1))
+		self.p, self.train = prob, False
+		self.v_w, self.v_b = 0, 0
 
 
 	def bprop(self, dEdo):
@@ -168,17 +173,25 @@ class PerceptronLayer():
 		else:
 			dEds = dEdo #Softmax or sum.
 
-		self.dEdw = np.dot(dEds, self.x.T) / dEdo.shape[1]
+		x = (self.x * self.dropped)
+		self.dEdw = np.dot(dEds, x.T) / dEdo.shape[1]
 		self.dEdb = np.sum(dEds, axis=1).reshape(self.b.shape) / dEdo.shape[1]
-		return np.dot(dEds.T, self.w).T #dEdx
+		return np.dot(dEds.T, self.w).T * self.dropped #dEdx
 
 
-	def update(self, lr):
+	def update(self, eps, mu):
 		"""
 		Update the weights in this layer.
+
+		Args:
+		-----
+			eps: Learning rate.
+			mu: Momentum coefficient.
 		"""
-		self.w = self.w - (lr * self.dEdw)
-		self.b = self.b - (lr * self.dEdb)
+		self.v_w = (mu * self.v_w) - (eps * self.dEdw)
+		self.v_b = (mu * self.v_b) - (eps * self.dEdb)
+		self.w = self.w + self.v_w
+		self.b = self.b + self.v_b
 
 
 	def feedf(self, data):
@@ -194,7 +207,12 @@ class PerceptronLayer():
 			A no_outputs x N array.
 		"""
 		self.x = data
-		self.s = np.dot(self.w, self.x) + self.b
+
+		if self.train:
+			self.dropped = np.random.binomial(1, self.p, data.shape)
+			self.s = np.dot(self.w, self.x * self.dropped) + self.b
+		else:
+			self.s = np.dot(self.w * self.p, self.x) + self.b
 
 		if self.o_type == 'sigmoid':
 			return sigmoid(s)
@@ -288,7 +306,7 @@ class Mlp():
   			parameters: Training parameters.
   		"""
   		for layer in self.layers:
-  			layer.update(parameters['learn_rate'])
+  			layer.update(parameters['eps'], parameters['mu'])
 
 
   	def predict(self, data):
@@ -368,7 +386,7 @@ def testmlp(filename):
 	target_test = np.hstack((np.zeros((1, data['test2'].shape[1])), np.ones((1, data['test3'].shape[1]))))
 
 	mlp = Mlp([PerceptronLayer(1, 10), PerceptronLayer(10, 256, "tanh")])
-	mlp.train(input_train.T, target_train.T, input_valid.T, target_valid.T, input_test.T, target_test.T, {'learn_rate': 0.1, 'epochs': 1600})
+	mlp.train(input_train.T, target_train.T, input_valid.T, target_valid.T, input_test.T, target_test.T, {'eps': 0.1, 'mu': 0.9, 'epochs': 1600})
 
 
 if __name__ == '__main__':
