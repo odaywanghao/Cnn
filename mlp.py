@@ -183,7 +183,7 @@ class PerceptronLayer():
 		return np.dot(dEds.T, self.w).T * self.dropped #dEdx
 
 
-	def update(self, eps_w, eps_b, mu):
+	def update(self, eps_w, eps_b, mu, l2):
 		"""
 		Update the weights in this layer.
 
@@ -191,9 +191,10 @@ class PerceptronLayer():
 		-----
 			eps_w, eps_b: Learning rates for the weights and biases.
 			mu: Momentum coefficient.
+			l2: L2 regularization coefficent.
 		"""
-		self.v_w = (mu * self.v_w) - (eps_w * self.dEdw)
-		self.v_b = (mu * self.v_b) - (eps_b * self.dEdb)
+		self.v_w = (mu * self.v_w) - (eps_w * self.dEdw) - (eps_w * l2 * self.w)
+		self.v_b = (mu * self.v_b) - (eps_b * self.dEdb) - (eps_b * l2 * self.b)
 		self.w = self.w + self.v_w
 		self.b = self.b + self.v_b
 
@@ -310,7 +311,7 @@ class Mlp():
   			parameters: Training parameters.
   		"""
   		for layer in self.layers:
-  			layer.update(parameters['eps'], parameters['mu'])
+  			layer.update(parameters['eps_w'], parameters['eps_b'], parameters['mu'], parameters['l2'])
 
 
   	def predict(self, data):
@@ -390,7 +391,7 @@ def testmlp(filename):
 	target_test = np.hstack((np.zeros((1, data['test2'].shape[1])), np.ones((1, data['test3'].shape[1]))))
 
 	mlp = Mlp([PerceptronLayer(1, 10), PerceptronLayer(10, 256, "tanh")])
-	mlp.train(input_train.T, target_train.T, input_valid.T, target_valid.T, input_test.T, target_test.T, {'eps': 0.1, 'mu': 0.9, 'epochs': 1600})
+	mlp.train(input_train.T, target_train.T, input_valid.T, target_valid.T, input_test.T, target_test.T, {'eps_w': 0.1, 'eps_b': 0.1, 'mu': 0.9, 'l2': 0, 'epochs': 1600})
 
 
 if __name__ == '__main__':

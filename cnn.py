@@ -104,7 +104,7 @@ class PoolLayer():
 			return np.kron(dEdo, np.ones(self.factor)) * (1.0 / np.prod(self.factor))
 			
 
-	def update(self, eps_w, eps_b, mu):
+	def update(self, eps_w, eps_b, mu, l2):
 		"""
 		Update the weights in this layer.
 
@@ -195,7 +195,7 @@ class ConvLayer():
 		return fastConv2d(dEds, rot2d90(kernels, 2), 'full')
 
 
-	def update(self, eps_w, eps_b, mu):
+	def update(self, eps_w, eps_b, mu, l2):
 		"""
 		Update the weights in this layer.
 
@@ -203,9 +203,10 @@ class ConvLayer():
 		-----
 			eps_w, eps_b: Learning rates for the weights and biases.
 			mu: Momentum coefficient.
+			l2: L2 Regularization coefficient.
 		"""
-		self.v_w = (mu * self.v_w) - (eps_w * self.dEdw)
-		self.v_b = (mu * self.v_b) - (eps_b * self.dEdb)
+		self.v_w = (mu * self.v_w) - (eps_w * self.dEdw) - (eps_w * l2 * self.kernels)
+		self.v_b = (mu * self.v_b) - (eps_b * self.dEdb) - (eps_b * l2 * self.bias)
 		self.kernels = self.kernels + self.v_w
 		self.bias = self.bias + self.v_b
 
@@ -396,10 +397,10 @@ class Cnn():
 		fc, conv = params['fc'], params['conv']
 
 		for layer in self.layers[0 : self.div_ind]:
-			layer.update(fc['eps_w'], fc['eps_b'], fc['mu'])
+			layer.update(fc['eps_w'], fc['eps_b'], fc['mu'], fc['l2'])
 
 		for layer in self.layers[self.div_ind:]:
-			layer.update(conv['eps_w'], conv['eps_b'], conv['mu'])
+			layer.update(conv['eps_w'], conv['eps_b'], conv['mu'], conv['l2'])
 
 
 	def classify(self, prediction):
@@ -443,7 +444,7 @@ def testMnist():
 	# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
 	layers = {
 		"fc":[
-				PerceptronLayer(10, 150, 0.9, "softmax"),
+				PerceptronLayer(10, 150, 0.9, 'softmax'),
 				PerceptronLayer(150, 256, 0.8, 'tanh')
 			],
 		"conv":[
@@ -456,18 +457,20 @@ def testMnist():
 
 	params = {
 		'epochs': 20,
-		'batch_size': 1,
+		'batch_size': 500,
 
 		'fc':{
 			'eps_w': 0.1,
 			'eps_b': 0.1,
-			'mu': 0.6
+			'mu': 0.6,
+			'l2': 0
 		},
 
 		'conv': {
 			'eps_w': 0.1,
 			'eps_b': 0.1,
-			'mu': 0.6
+			'mu': 0.6,
+			'l2': 0
 		}
 	}
 
@@ -494,7 +497,7 @@ def testCifar10():
 	layers = {
 		"fc":[
 				PerceptronLayer(10, 64, 0.5, "softmax", init_w=0.1),
-				PerceptronLayer(64, 64, 0.5, 'relu', init_w=0.1)
+				PerceptronLayer(64, 64, 0.5, init_w=0.1)
 			],
 		"conv":[
 				ConvLayer(64, 32, (5,5)),
@@ -512,13 +515,15 @@ def testCifar10():
 		'fc':{
 			'eps_w': 0.001,
 			'eps_b': 0.002,
-			'mu': 0.9
+			'mu': 0.9,
+			'l2': 0.03
 		},
 
 		'conv': {
 			'eps_w': 0.001,
 			'eps_b': 0.002,
-			'mu': 0.9
+			'mu': 0.9,
+			'l2': 0.004
 		}
 	}
 
