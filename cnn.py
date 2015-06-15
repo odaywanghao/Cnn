@@ -300,9 +300,10 @@ class Cnn():
 				print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrs, ce_train, ce_valid)
 				if epoch != 0 and epoch % 100 == 0:
   					print '--------------------------------------------------------------------------------'
+  				if params['view_kernels']:
+  					self.displayKernels()
 
   				itrs = itrs + 1
-  				self.displayKernels()
   				avg_train_errors.append(ce_train)
   				avg_valid_errors.append(ce_valid)
 
@@ -317,9 +318,10 @@ class Cnn():
 			print '\r| Epoch: {:5d}  |  Iteration: {:8d}  |  Train mce: {:.2f}  |  Valid mce: {:.2f} |'.format(epoch, itrs, ce_train, ce_valid)
 			if epoch != 0 and epoch % 100 == 0:
   				print '--------------------------------------------------------------------------------'
+  			if params['view_kernels']:
+  				self.displayKernels()
 
   			itrs = itrs + 1
-  			self.displayKernels()
   			avg_train_errors.append(ce_train)
   			avg_valid_errors.append(ce_valid)
 
@@ -497,6 +499,7 @@ def testMnist():
 	params = {
 		'epochs': 20,
 		'batch_size': 500,
+		'view_kernels': True,
 
 		'fc':{
 			'eps_w': 0.1,
@@ -559,6 +562,7 @@ def testCifar10():
 	params = {
 		'epochs': 30,
 		'batch_size': 128,
+		'view_kernels': True,
 
 		'fc':{
 			'eps_w': 0.001,
