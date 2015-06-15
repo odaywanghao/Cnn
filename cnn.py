@@ -17,6 +17,7 @@ import theano as thn
 import theano.tensor as tn
 import theano.tensor.nnet.conv as conv
 import matplotlib.pyplot as plt
+import pickle as pkl
 from theano.tensor.signal.downsample import max_pool_2d as max_pool
 from theano.tensor.signal.downsample import max_pool_2d_same_size as max_pool_same
 from skimage.transform import downscale_local_mean as downsample
@@ -244,7 +245,7 @@ class Cnn():
 	Convolutional neural network class.
 	"""
 
-	def __init__(self, layers):
+	def __init__(self, layers={}):
 		"""
 		Initialize network.
 
@@ -252,9 +253,11 @@ class Cnn():
 		-----
 			layers: Dict. of fully connected and convolutional layers arranged heirarchically.
 		"""
-		self.layers = deepcopy(layers["fc"]) + deepcopy(layers["conv"])
-		self.div_x_shape = None
-		self.div_ind = len(layers["fc"])
+		self.layers, self.div_x_shape, self.div_ind = [], None, 0
+		if layers != {}:
+			self.layers = deepcopy(layers["fc"]) + deepcopy(layers["conv"])
+			self.div_x_shape = None
+			self.div_ind = len(layers["fc"])
 
 
 	def train(self, train_data, train_label, valid_data, valid_label, test_data, test_label, params):
@@ -344,7 +347,11 @@ class Cnn():
   		tc = self.classify(self.predict(test_data))
   		print '\nTest mce: {:.2f}'.format(mce(tc, test_label))
 
-  		#After training, save network architecture.
+  		#Also add training intervals to save architecture.
+  		print "Saving model..."
+  		self.saveModel('mnist_cnn_1')
+
+  		print "Done."
 
 
 	def backprop(self, dE):
@@ -440,6 +447,44 @@ class Cnn():
 		return clasfn
 
 
+	def saveModel(self, filename):
+		"""
+		Save the current network model in file filename.
+
+		Args:
+		-----
+			filename: String repr. name of file.
+		"""
+		model = {
+			'fc': self.layers[0 : self.div_ind],
+			'conv': self.layers[self.div_ind :]
+		}
+
+		f = open(filename, 'w')
+		pkl.dump(model, f, 1)
+		f.close()
+
+
+	def loadModel(self, filename):
+		"""
+		Load an empty architecture with the network model
+		saved in file filename.
+
+		Args:
+		-----
+			filename: String repr. name of file.
+		"""
+		f = open(filename, 'r')
+		model = pkl.load(f)
+
+		if model != {} and self.layers == []:
+			self.layers = model["fc"] + model["conv"]
+			self.div_x_shape = None
+			self.div_ind = len(model["fc"])
+
+		f.close()
+
+
 	def displayKernels(self):
 		"""
 		Displays the kernels in the first convolutional layer.
@@ -524,7 +569,6 @@ def testMnist():
 
 	cnn = Cnn(layers)
 	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
-	cnn.displayKernels()
 
 
 def testCifar10():
