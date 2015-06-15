@@ -25,6 +25,10 @@ from mlp import *
 from util import *
 
 
+def centerDataset(data):
+	return data
+
+
 def fastConv2d(data, kernel, convtype='valid'):
 	"""
 	Convolve data with the given kernel.
@@ -297,8 +301,8 @@ class Cnn():
 				if epoch != 0 and epoch % 100 == 0:
   					print '--------------------------------------------------------------------------------'
 
-
   				itrs = itrs + 1
+  				self.displayKernels()
   				avg_train_errors.append(ce_train)
   				avg_valid_errors.append(ce_valid)
 
@@ -315,9 +319,11 @@ class Cnn():
   				print '--------------------------------------------------------------------------------'
 
   			itrs = itrs + 1
+  			self.displayKernels()
   			avg_train_errors.append(ce_train)
   			avg_valid_errors.append(ce_valid)
 
+  			plt.figure(2)
   			plt.show()
   			train_errors.append(np.average(avg_train_errors))
   			valid_errors.append(np.average(avg_valid_errors))
@@ -432,6 +438,33 @@ class Cnn():
 		return clasfn
 
 
+	def displayKernels(self):
+		"""
+		Displays the kernels in the first convolutional layer.
+		"""
+		plt.figure(1)
+
+		kernels = self.layers[len(self.layers) - 1].kernels
+		k, l, m, n = kernels.shape
+		if l == 2 or l > 4:
+			print "displayKernels() Error: Invalid number of channels."
+			pass
+
+		x = np.ceil(np.sqrt(k))
+		y = np.ceil(k/x)
+
+		for i in xrange(k):
+			plt.subplot(x, y, i)
+			kernel = np.transpose(kernels[i], (1, 2, 0))
+			if kernel.shape[2] == 1:
+				plt.imshow(kernel[:, :, 0], 'gray')
+			else:
+				plt.imshow(kernel)
+			plt.axis('off')
+
+		plt.draw()
+
+
 def testMnist():
 	"""
 	Test cnn using the MNIST dataset.
@@ -488,6 +521,7 @@ def testMnist():
 
 	cnn = Cnn(layers)
 	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
+	cnn.displayKernels()
 
 
 def testCifar10():
@@ -497,19 +531,21 @@ def testCifar10():
 
 	print "Loading CIFAR-10 images..."
 	data = np.load('data/cifar10.npz')
-	train_data = data['train_data'][0:10000]
-	valid_data = data['train_data'][10000:10500]
+	train_data = data['train_data'][0:49500]
+	valid_data = data['train_data'][49500:50000]
 	test_data = data['test_data']
-	train_label = data['train_label'][0:10000]
-	valid_label = data['train_label'][10000:10500]
+	train_label = data['train_label'][0:49500]
+	valid_label = data['train_label'][49500:50000]
 	test_label = data['test_label']
+
+	#print "Centering images..."
 
 	print "Initializing network..."
 	# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
 	layers = {
 		"fc":[
-				PerceptronLayer(10, 64, 0.5, "softmax", init_w=0.1),
-				PerceptronLayer(64, 64, 0.5, init_w=0.1)
+				PerceptronLayer(10, 64, 0.9, 'softmax'),
+				PerceptronLayer(64, 64, 0.8, 'tanh')
 			],
 		"conv":[
 				ConvLayer(64, 32, (5,5)),
@@ -517,20 +553,20 @@ def testCifar10():
 				ConvLayer(32, 32, (5,5)),
 				PoolLayer((2, 2), 'max'),
 				ConvLayer(32, 3, (5,5), init_w=0.0001)
-				]
+			]
 	}
 
 	params = {
-		'epochs': 20,
-		'batch_size': 500,
+		'epochs': 30,
+		'batch_size': 128,
 
 		'fc':{
 			'eps_w': 0.001,
 			'eps_b': 0.002,
 			'eps_decay': 9,
-			'eps_intvl': 160,
+			'eps_intvl': 0,
 			'eps_satr': 'inf',
-			'mu': 0.9,
+			'mu': 0.6,
 			'l2': 0.03
 		},
 
@@ -538,9 +574,9 @@ def testCifar10():
 			'eps_w': 0.001,
 			'eps_b': 0.002,
 			'eps_decay': 9,
-			'eps_intvl': 160,
+			'eps_intvl': 0,
 			'eps_satr': 'inf',
-			'mu': 0.9,
+			'mu': 0.6,
 			'l2': 0.004
 		}
 	}
