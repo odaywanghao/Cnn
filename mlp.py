@@ -161,7 +161,7 @@ class PerceptronLayer():
 			no_outputs: No. output classes.
 			no_inputs: No. input features.
 			prob: Prob. of a neuron being present during dropout.
-			outputType: String repr. type of output i.e 'sum', 'sigmoid', 'tanh', 'relu' or 'softmax'.
+			outputType: String repr. type of output i.e 'linear', 'sigmoid', 'tanh', 'relu' or 'softmax'.
 			init_w: Std dev of initial weights drawn from a std Normal distro.
 			init_b: Initial value of biases.
 		"""
@@ -172,7 +172,7 @@ class PerceptronLayer():
 			self.w = init_w * np.random.randn(no_outputs, no_inputs)
 		self.b = init_b * np.ones((no_outputs, 1))
 		self.p, self.train = prob, False
-		self.v_w, self.v_b = 0, 0
+		self.v_w, self.dw_ms, self.v_b, self.db_ms = 0, 0, 0, 0
 
 
 	def bprop(self, dEdo):
@@ -206,7 +206,7 @@ class PerceptronLayer():
 		return np.dot(dEds.T, self.w).T * self.dropped #dEdx
 
 
-	def update(self, eps_w, eps_b, mu, l2):
+	def update(self, eps_w, eps_b, mu, l2, useRMSProp):
 		"""
 		Update the weights in this layer.
 
@@ -215,7 +215,16 @@ class PerceptronLayer():
 			eps_w, eps_b: Learning rates for the weights and biases.
 			mu: Momentum coefficient.
 			l2: L2 regularization coefficent.
+			useRMSProp: Boolean indicating the use of RMSProp.
 		"""
+		if useRMSProp:
+			self.dw_ms = (0.9 * self.dw_ms) + (0.1 * np.square(self.dEdw))
+			self.db_ms = (0.9 * self.db_ms) + (0.1 * np.square(self.dEdb))
+			self.dEdw = self.dEdw / np.sqrt(self.dw_ms)
+			self.dEdb = self.dEdb / np.sqrt(self.db_ms)
+			self.dEdw[np.where(np.isnan(self.dEdw))] = 0
+			self.dEdb[np.where(np.isnan(self.dEdb))] = 0
+
 		self.v_w = (mu * self.v_w) - (eps_w * self.dEdw) - (eps_w * l2 * self.w)
 		self.v_b = (mu * self.v_b) - (eps_b * self.dEdb) - (eps_b * l2 * self.b)
 		self.w = self.w + self.v_w

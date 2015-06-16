@@ -1,7 +1,7 @@
 Convolutional Neural Network
 ============================
 
-A configurable convolutional neural network for image recognition and classification.
+A non-optimized convolutional neural network (CNN) for experimentation on image recognition and classification. NOT RECOMMENDED FOR USE ON VERY LARGE DATASETS. For such you may want to use [cuda-convnet](https://code.google.com/p/cuda-convnet/), however u're free to tinker with this :D
 
 
 Dependencies
@@ -11,24 +11,77 @@ You need the following dependencies to run the network:
 
 * [Numpy] (http://www.numpy.org)
 * [Skimage] (http://scikit-image.org)
-* [Theano] (http://deeplearning.net/software/theano/)
+* [Theano (Bleeding-edge)] (http://deeplearning.net/software/theano/install.html#install-bleeding-edge)
 
 
-Usage
------
+Initialization
+--------------
 
-### Initialization
+To initialize the cnn, you need to first specify its architecture. Here the architecture consists of two "levels". The first, `fc`, contains multiple perceptron layers a.k.a fully-connected layers while the second, `conv`, contains a combination of Pooling and Convolutional layers.
 
-To use the cnn, you need to first specify its architecture using a dictionary. The dictionary should contain a list of fully-connected layers and convolutional layers.
+These two levels are defined in a dictionary as ffs.
 
 	{
-		"fully-connected": [],
-		"convolutional"  : []
+		"fc": [],
+		"conv"  : []
 	}
 
-A convolutional layer is created by specifying the number of kernels in the layer, size of each kernel and the sampling factor as tuples.
+All layers are arranged heirarchically, with the topmost layer in each level placed at the beginning of the list. Once this is done, the network can be created by passing the dictionary. Optionally an empty dictionary can be used to initialize the network if an exsisting network model is to be used by calling the CNN's `loadModel()` method.
 
-	ConvLayer(16, (5,5), (2, 2))
+It is important to note that when ordering the layers, the number of outgoing units from the topmost `conv` layer MUST equal the number of incoming units to the bottommost `fc` layer. Hence some "calculations" will need to be done across all layers to ensure that each layer is ready to recieve the right number of units from the preceeding layer. This is further explained below.
+
+
+### Fully-Connected Layer
+
+A fully-connected layer is created using the `PerceptronLayer class
+
+	PerceptronLayer(no_outputs, no_inputs, prob=1, outputType='relu', init_w=0.01, init_b=0)
+
+This layer supports 5 types of activation functions:
+
+* Rectifier
+* Hyperbolic tangent
+* Softmax
+* Sigmoid
+* Linear
+
+The probability of a neuron being present during dropout is specified through the `prob` parameter.
+
+
+### Convolutional Layer
+
+A convolutional layer is created using the `ConvLayer` class. *briefly state what it does*
+
+	ConvLayer(noKernels, channels, kernelSize, outputType='relu', stride=1, init_w=0.01, init_b=0)
+
+This layer supports 3 types of activation functions:
+
+* Rectifier
+* Hyperbolic tangent
+* Sigmoid
+
+*Talk about stride, input and how output of this layer is calculated.*
+
+
+### Pooling Layer
+
+This layer typically follows the convolutional layer and *briefly state what it does*
+
+	PoolLayer(factor, poolType='avg')
+
+This layer supports 2 the two common types of pooling functions:
+
+* Max pooling
+* Mean Pooling/subsampling
+
+*Talk about input & how output of this layer is calculated.*
+
+
+Training
+--------
+
+*Talk about parameter file.*
+*Talk about the various training parameters.*
 
 Likewise a fully-connected layer is created by specifying the number of outgoing units from the layer, number of incoming units to the layer and the type of activation function for the layer.
 
@@ -57,12 +110,15 @@ Ensure that the number of incoming units to the first fully-connected layer is e
 	Input image size: 28 x 28
 
 	{
-		"fully-connected": [ ...,
-							 PerceptronLayer(150, 256, "tanh")
-						   ],
-		"convolutional"  : [ ConvLayer(16, (5,5), (2, 2)),
-						     ConvLayer( 6, (5,5), (2, 2))
-						   ]
+		"fc":[
+				PerceptronLayer(10, 64, outputType='softmax'),
+				PerceptronLayer(64, 64)
+			],
+
+		"conv":[
+				PoolLayer((2, 2)),
+				ConvLayer(32, 3, (5,5))
+			]
 	}
 
 Finally, initialize the network with the specified architecture.
@@ -81,15 +137,16 @@ Finally, initialize the network with the specified architecture.
 
 Training and prediction on the network are done by calling the `train()` and `predict()` functions respectively.
 
+To use dropout, the probability of a neuron being present needs to be specified and just before training, the layer's 'train' property set to True. Once training ends, this should be set back to False. 
+
 **Note** The `predict()` function returns a probability distributions over the various classes. You can however call the `classify()` function on its output to get the most probable class for each data instance.
 
 To Do
 -----
 
-1. Check and automatically rectify inconsistent connection between fully-connected and convolutional layers of network.
-2. Allow exportation and importation of network weights.
-3. Add tool for visualization of kernels.
-4. Allow GPU utilization.
+1. Improve exportation and importation of network model.
+2. Implement GPU utilization.
+3. Implement local contrast normalization.
 
 References
 ----------
@@ -103,4 +160,3 @@ References
 * Sutskever, Martens, Dahl & Hinton (2013) *On the importance of initialization and momentum in deep learning*.
 * Krizhevsky, Sutskever & Hinton (2012) *ImageNet Classification with Deep Convolutional Neural Networks*.
 * Srivastava, Hinton, Krizhevsky, Sutskever & Salakhutdinov (2014) *Dropout: A Simple Way to Prevent Neural Networks from Overfitting*.
- 

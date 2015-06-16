@@ -27,7 +27,14 @@ from util import *
 
 
 def centerDataset(data):
-	return data
+
+	new_data = np.transpose(data, (0, 3, 1, 2))
+	new_data = np.swapaxes(new_data, 0, 1)
+	scaled_data = new_data - np.mean(new_data, axis=1)
+	scaled_data = np.swapaxes(scaled_data, 0, 1)
+	scaled_data = np.transpose(scaled_data, (0, 2, 3, 1))
+
+	return scaled_data
 
 
 def fastConv2d(data, kernel, convtype='valid', stride=(1, 1)):
@@ -109,13 +116,16 @@ class PoolLayer():
 			return np.kron(dEdo, np.ones(self.factor)) * (1.0 / np.prod(self.factor))
 			
 
-	def update(self, eps_w, eps_b, mu, l2):
+	def update(self, eps_w, eps_b, mu, l2, useRMSProp):
 		"""
 		Update the weights in this layer.
 
 		Args:
 		-----
-			eps: Learning rate.
+			eps_w, eps_b: Learning rates for the weights and biases.
+			mu: Momentum coefficient.
+			l2: L2 Regularization coefficient.
+			useRMSProp: Boolean indicating the use of RMSProp.
 		"""
 		pass #Nothing to do here :P
 
@@ -168,7 +178,7 @@ class ConvLayer():
 		self.stride = stride, stride
 		self.d_stride = np.zeros(self.stride)
 		self.d_stride[0, 0] = 1
-		self.v_w, self.v_b = 0, 0
+		self.v_w, self.dw_ms, self.v_b, self.db_ms = 0, 0, 0, 0
 
 
 	def bprop(self, dEdo):
@@ -202,14 +212,13 @@ class ConvLayer():
 		self.dEdw = fastConv2d(xs, rot2d90(dEds, 2)) / dEdo.shape[0]
 		self.dEdw = np.swapaxes(self.dEdw, 0, 1)
 		self.dEdw = rot2d90(self.dEdw, 2)
-		#print self.dEdw.shape
 
 		#Correlate
 		dEds, kernels = np.swapaxes(dEds, 0, 1), np.swapaxes(self.kernels, 0, 1)
 		return fastConv2d(dEds, rot2d90(kernels, 2), 'full')
 
 
-	def update(self, eps_w, eps_b, mu, l2):
+	def update(self, eps_w, eps_b, mu, l2, useRMSProp):
 		"""
 		Update the weights in this layer.
 
@@ -218,7 +227,16 @@ class ConvLayer():
 			eps_w, eps_b: Learning rates for the weights and biases.
 			mu: Momentum coefficient.
 			l2: L2 Regularization coefficient.
+			useRMSProp: Boolean indicating the use of RMSProp.
 		"""
+		if useRMSProp:
+			self.dw_ms = (0.9 * self.dw_ms) + (0.1 * np.square(self.dEdw))
+			self.db_ms = (0.9 * self.db_ms) + (0.1 * np.square(self.dEdb))
+			self.dEdw = self.dEdw / np.sqrt(self.dw_ms)
+			self.dEdb = self.dEdb / np.sqrt(self.db_ms)
+			self.dEdw[np.where(np.isnan(self.dEdw))] = 0
+			self.dEdb[np.where(np.isnan(self.dEdb))] = 0
+
 		self.v_w = (mu * self.v_w) - (eps_w * self.dEdw) - (eps_w * l2 * self.kernels)
 		self.v_b = (mu * self.v_b) - (eps_b * self.dEdb) - (eps_b * l2 * self.bias)
 		self.kernels = self.kernels + self.v_w
@@ -358,7 +376,7 @@ class Cnn():
 
   		#Also add training intervals to save architecture.
   		print "Saving model..."
-  		self.saveModel('mnist_cnn_1')
+  		#self.saveModel('mnist_cnn_1')
 
   		print "Done."
 
@@ -424,13 +442,13 @@ class Cnn():
 		eps_b = epsilon_decay(fc['eps_b'], fc['eps_decay'], fc['eps_satr'], i, fc['eps_intvl'])
 
 		for layer in self.layers[0 : self.div_ind]:
-			layer.update(eps_w, eps_b, fc['mu'], fc['l2'])
+			layer.update(eps_w, eps_b, fc['mu'], fc['l2'], fc['RMSProp'])
 
 		eps_w = epsilon_decay(conv['eps_w'], conv['eps_decay'], conv['eps_satr'], i, conv['eps_intvl'])
 		eps_b = epsilon_decay(conv['eps_b'], conv['eps_decay'], conv['eps_satr'], i, conv['eps_intvl'])
 
 		for layer in self.layers[self.div_ind:]:
-			layer.update(eps_w, eps_b, conv['mu'], conv['l2'])
+			layer.update(eps_w, eps_b, conv['mu'], conv['l2'], conv['RMSProp'])
 
 
 	def classify(self, prediction):
@@ -447,6 +465,9 @@ class Cnn():
 		"""
 		N, k = prediction.shape
 		clasfn = np.zeros((N, k))
+
+		#printMatrix(prediction)
+		#print prediction.shape
 
 		for row in xrange(N):
 			ind = np.where(prediction[row] == np.amax(prediction[row]))[0][0]
@@ -511,7 +532,7 @@ class Cnn():
 
 		for i in xrange(k):
 			plt.subplot(x, y, i)
-			kernel = np.transpose(kernels[i], (1, 2, 0))
+			kernel = np.transpose(kernels[i], (2, 1, 0))
 			if kernel.shape[2] == 1:
 				plt.imshow(kernel[:, :, 0], 'gray')
 			else:
@@ -535,12 +556,18 @@ def testMnist():
 	valid_label = data['valid_label'][0:1000]
 	test_label = data['test_label']
 
+	print "Centering dataset..."
+
+	train_data = centerDataset(train_data)
+	valid_data = centerDataset(valid_data)
+	test_data = centerDataset(test_data)
+
 	print "Initializing network..."
 	# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
 	layers = {
 		"fc":[
-				PerceptronLayer(10, 150, 0.9, 'softmax'),
-				PerceptronLayer(150, 256, 0.8, 'tanh')
+				PerceptronLayer(10, 150, outputType='softmax'),
+				PerceptronLayer(150, 256, outputType='tanh')
 			],
 		"conv":[
 				PoolLayer((2, 2), 'max'),
@@ -556,23 +583,25 @@ def testMnist():
 		'view_kernels': True,
 
 		'fc':{
-			'eps_w': 0.1,
-			'eps_b': 0.1,
-			'eps_decay': 0, #0.5,
-			'eps_intvl': 0,
+			'eps_w': 0.0007,
+			'eps_b': 0.0007,
+			'eps_decay': 9,
+			'eps_intvl': 30,
 			'eps_satr': 'inf',
-			'mu': 0.6,
-			'l2': 0
+			'mu': 0.7,
+			'l2': 0.95,
+			'RMSProp': True
 		},
 
 		'conv': {
-			'eps_w': 0.1,
-			'eps_b': 0.1,
-			'eps_decay': 0, #0.5,
-			'eps_intvl': 0,
+			'eps_w': 0.0007,
+			'eps_b': 0.0007,
+			'eps_decay': 9,
+			'eps_intvl': 30,
 			'eps_satr': 'inf',
-			'mu': 0.6,
-			'l2': 0
+			'mu': 0.7,
+			'l2': 0.95,
+			'RMSProp': True
 		}
 	}
 
