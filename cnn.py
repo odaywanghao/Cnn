@@ -30,7 +30,7 @@ def centerDataset(data):
 	return data
 
 
-def fastConv2d(data, kernel, convtype='valid'):
+def fastConv2d(data, kernel, convtype='valid', stride=(1, 1)):
 	"""
 	Convolve data with the given kernel.
 
@@ -45,7 +45,7 @@ def fastConv2d(data, kernel, convtype='valid'):
 	"""
 	d = tn.dtensor4('d')
 	k = tn.dtensor4('k')
-	f = thn.function([d, k], conv.conv2d(d, k, data.shape, kernel.shape, convtype))
+	f = thn.function([d, k], conv.conv2d(d, k, None, None, convtype, stride))
 	return f(data, kernel)
 
 
@@ -148,22 +148,26 @@ class ConvLayer():
 	A Convolutional layer.
 	"""
 
-	def __init__(self, k, l, ksize, outputType='relu', init_w=0.01, init_b=0):
+	def __init__(self, noKernels, channels, kernelSize, outputType='relu', stride=1, init_w=0.01, init_b=0):
 		"""
 		Initialize convolutional layer.
 
 		Args:
 		-----
-			k: No. feature maps in layer.
-			l: No. input planes in layer or no. channels in input image.
-			ksize: Tuple repr. the size of a kernel.
+			noKernels: No. feature maps in layer.
+			channels: No. input planes in layer or no. channels in input image.
+			kernelSize: Tuple repr. the size of a kernel.
+			stride: STRIDE MOTHERFUCKER!!! DO YOU SPEAK IT!!! Integer repr. convolutional stride.
 			outputType: String repr. type of non-linear activation i.e 'relu', 'tanh' or 'sigmoid'.
 			init_w: Std dev of initial weights drawn from a std Normal distro.
 			init_b: Initial value of biases.
 		"""
 		self.o_type = outputType
-		self.kernels = init_w * np.random.randn(k, l, ksize[0], ksize[1])
-		self.bias = init_b * np.ones((k, 1, 1))
+		self.kernels = init_w * np.random.randn(noKernels, channels, kernelSize[0], kernelSize[1])
+		self.bias = init_b * np.ones((noKernels, 1, 1))
+		self.stride = stride, stride
+		self.d_stride = np.zeros(self.stride)
+		self.d_stride[0, 0] = 1
 		self.v_w, self.v_b = 0, 0
 
 
@@ -187,6 +191,10 @@ class ConvLayer():
 		else:
 			dEds = dEdo * np.where((self.maps + self.bias) > 0, 1, 0)
 
+		dEds = np.kron(dEds, self.d_stride)
+		if self.stride[0] > 1:
+			dEds = dEds[:, :, :-(self.stride[0] - 1), :-(self.stride[1] - 1)]
+
 		self.dEdb = np.sum(np.sum(np.average(dEds, axis=0), axis=1), axis=1).reshape(self.bias.shape)
 
 		#Correlate.
@@ -194,6 +202,7 @@ class ConvLayer():
 		self.dEdw = fastConv2d(xs, rot2d90(dEds, 2)) / dEdo.shape[0]
 		self.dEdw = np.swapaxes(self.dEdw, 0, 1)
 		self.dEdw = rot2d90(self.dEdw, 2)
+		#print self.dEdw.shape
 
 		#Correlate
 		dEds, kernels = np.swapaxes(dEds, 0, 1), np.swapaxes(self.kernels, 0, 1)
@@ -230,7 +239,7 @@ class ConvLayer():
 			A N x k x m2 x n2 array of output plains.
 		"""
 		self.x = data
-		self.maps = fastConv2d(self.x, self.kernels)
+		self.maps = fastConv2d(self.x, self.kernels, stride=self.stride)
 
 		if self.o_type == 'tanh':
 			return np.tanh(self.maps + self.bias)
@@ -536,8 +545,8 @@ def testMnist():
 		"conv":[
 				PoolLayer((2, 2), 'max'),
 				ConvLayer(16, 6, (5,5)),
-				PoolLayer((2, 2), 'max'),
-				ConvLayer(6, 1, (5,5))
+				#PoolLayer((2, 2), 'max'),
+				ConvLayer(6, 1, (6,6), stride=2) #Ensure result is an integer!
 			]
 	}
 
@@ -549,7 +558,7 @@ def testMnist():
 		'fc':{
 			'eps_w': 0.1,
 			'eps_b': 0.1,
-			'eps_decay': 0.5,
+			'eps_decay': 0, #0.5,
 			'eps_intvl': 0,
 			'eps_satr': 'inf',
 			'mu': 0.6,
@@ -559,7 +568,7 @@ def testMnist():
 		'conv': {
 			'eps_w': 0.1,
 			'eps_b': 0.1,
-			'eps_decay': 0.5,
+			'eps_decay': 0, #0.5,
 			'eps_intvl': 0,
 			'eps_satr': 'inf',
 			'mu': 0.6,
