@@ -18,6 +18,7 @@ import theano.tensor as tn
 import theano.tensor.nnet.conv as conv
 import matplotlib.pyplot as plt
 import pickle as pkl
+from theano import shared
 from theano.tensor.signal.downsample import max_pool_2d as max_pool
 from theano.tensor.signal.downsample import max_pool_2d_same_size as max_pool_same
 from skimage.transform import downscale_local_mean as downsample
@@ -52,8 +53,8 @@ def fastConv2d(data, kernel, convtype='valid', stride=(1, 1)):
 	"""
 	d = tn.dtensor4('d')
 	k = tn.dtensor4('k')
-	f = thn.function([d, k], conv.conv2d(d, k, None, None, convtype, stride))
-	return f(data, kernel)
+	f = thn.function([], conv.conv2d(d, k, None, None, convtype, stride), givens={d: shared(data), k: shared(kernel)})
+	return f()
 
 
 def rot2d90(data, no_rots):
@@ -144,11 +145,11 @@ class PoolLayer():
 		"""
 		if self.type == 'max':
 			x = tn.dtensor4('x')
-			f = thn.function([x], max_pool(x, self.factor))
-			g = thn.function([x], max_pool_same(x, self.factor))
-			self.grad = g(data + 0.0000000001) / (data + 0.0000000001) #Pick up max inactive units.
+			f = thn.function([], max_pool(x, self.factor), givens={x: shared(data)})
+			g = thn.function([], max_pool_same(x, self.factor)/x, givens={x: shared(data + 0.0000000001)})
+			self.grad = g()
 			self.grad[np.where(np.isnan(self.grad))] = 0
-			return f(data)
+			return f()
 		else:
 			return downsample(data, (1, 1, self.factor[0], self.factor[1]))
 
