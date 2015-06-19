@@ -51,9 +51,10 @@ def fastConv2d(data, kernel, convtype='valid', stride=(1, 1)):
 	--------
 		A N x k x m x n array representing the output.
 	"""
+	_data, _kernel =  np.asarray(data, dtype='float32'), np.asarray(kernel, dtype='float32')
 	d = tn.dtensor4('d')
 	k = tn.dtensor4('k')
-	f = thn.function([], conv.conv2d(d, k, None, None, convtype, stride), givens={d: shared(data), k: shared(kernel)})
+	f = thn.function([], conv.conv2d(d, k, None, None, convtype, stride), givens={d: shared(_data), k: shared(_kernel)})
 	return f()
 
 
@@ -144,9 +145,10 @@ class PoolLayer():
 			A N x k x m2 x n2 array of output plains.
 		"""
 		if self.type == 'max':
+			_data = np.asarray(data, dtype='float32')
 			x = tn.dtensor4('x')
-			f = thn.function([], max_pool(x, self.factor), givens={x: shared(data)})
-			g = thn.function([], max_pool_same(x, self.factor)/x, givens={x: shared(data + 0.0000000001)})
+			f = thn.function([], max_pool(x, self.factor), givens={x: shared(_data)})
+			g = thn.function([], max_pool_same(x, self.factor)/x, givens={x: shared(_data + 0.0000000001)})
 			self.grad = g()
 			self.grad[np.where(np.isnan(self.grad))] = 0
 			return f()
@@ -174,8 +176,9 @@ class ConvLayer():
 			init_b: Initial value of biases.
 		"""
 		self.o_type = outputType
-		self.kernels = init_w * np.random.randn(noKernels, channels, kernelSize[0], kernelSize[1])
-		self.bias = init_b * np.ones((noKernels, 1, 1))
+		self.init_w, self.init_b = init_w, init_b
+		self.kernels = self.init_w * np.random.randn(noKernels, channels, kernelSize[0], kernelSize[1])
+		self.bias = self.init_b * np.ones((noKernels, 1, 1))
 		self.stride = stride, stride
 		self.d_stride = np.zeros(self.stride)
 		self.d_stride[0, 0] = 1
@@ -606,8 +609,9 @@ def testMnist():
 		}
 	}
 
-	cnn = Cnn(layers)
-	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
+	#cnn = Cnn(layers)
+	#cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
+	return layers
 
 
 def testCifar10():

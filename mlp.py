@@ -166,11 +166,13 @@ class PerceptronLayer():
 			init_b: Initial value of biases.
 		"""
 		self.o_type = outputType
+		self.init_w, self.init_b = init_w, init_b
+		
 		if outputType == 'sigmoid' or outputType == 'tanh':
-			self.w = (6.0/(no_outputs + no_inputs)) * np.random.randn(no_outputs, no_inputs)
-		else:
-			self.w = init_w * np.random.randn(no_outputs, no_inputs)
-		self.b = init_b * np.ones((no_outputs, 1))
+			self.init_w = (6.0/(no_outputs + no_inputs))
+
+		self.w = self.init_w * np.random.randn(no_outputs, no_inputs)
+		self.b = self.init_b * np.ones((no_outputs, 1))
 		self.p, self.train = prob, False
 		self.v_w, self.dw_ms, self.v_b, self.db_ms = 0, 0, 0, 0
 
