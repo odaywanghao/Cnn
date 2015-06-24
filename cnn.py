@@ -118,7 +118,7 @@ class PoolLayer():
 			return np.kron(dEdo, np.ones(self.factor)) * (1.0 / np.prod(self.factor))
 			
 
-	def update(self, eps_w, eps_b, mu, l2, useRMSProp):
+	def update(self, eps_w, eps_b, mu, l2, useRMSProp, RMSProp_decay, minsq_RMSProp):
 		"""
 		Update the weights in this layer.
 
@@ -222,7 +222,7 @@ class ConvLayer():
 		return fastConv2d(dEds, rot2d90(kernels, 2), 'full')
 
 
-	def update(self, eps_w, eps_b, mu, l2, useRMSProp):
+	def update(self, eps_w, eps_b, mu, l2, useRMSProp, RMSProp_decay, minsq_RMSProp):
 		"""
 		Update the weights in this layer.
 
@@ -232,12 +232,14 @@ class ConvLayer():
 			mu: Momentum coefficient.
 			l2: L2 Regularization coefficient.
 			useRMSProp: Boolean indicating the use of RMSProp.
+			RMSProp_decay: Decay term for the squared average.
+			minsq_RMSProp: Constant added to square-root of squared average. 
 		"""
 		if useRMSProp:
-			self.dw_ms = (0.9 * self.dw_ms) + (0.1 * np.square(self.dEdw))
-			self.db_ms = (0.9 * self.db_ms) + (0.1 * np.square(self.dEdb))
-			self.dEdw = self.dEdw / np.sqrt(self.dw_ms)
-			self.dEdb = self.dEdb / np.sqrt(self.db_ms)
+			self.dw_ms = (RMSProp_decay * self.dw_ms) + ((1.0 - RMSProp_decay) * np.square(self.dEdw))
+			self.db_ms = (RMSProp_decay * self.db_ms) + ((1.0 - RMSProp_decay) * np.square(self.dEdb))
+			self.dEdw = self.dEdw / (np.sqrt(self.dw_ms) + minsq_RMSProp)
+			self.dEdb = self.dEdb / (np.sqrt(self.db_ms) + minsq_RMSProp)
 			self.dEdw[np.where(np.isnan(self.dEdw))] = 0
 			self.dEdb[np.where(np.isnan(self.dEdb))] = 0
 
@@ -446,13 +448,13 @@ class Cnn():
 		eps_b = epsilon_decay(fc['eps_b'], fc['eps_decay'], fc['eps_satr'], i, fc['eps_intvl'])
 
 		for layer in self.layers[0 : self.div_ind]:
-			layer.update(eps_w, eps_b, fc['mu'], fc['l2'], fc['RMSProp'])
+			layer.update(eps_w, eps_b, fc['mu'], fc['l2'], fc['RMSProp'], fc['RMSProp_decay'], fc['minsq_RMSProp'])
 
 		eps_w = epsilon_decay(conv['eps_w'], conv['eps_decay'], conv['eps_satr'], i, conv['eps_intvl'])
 		eps_b = epsilon_decay(conv['eps_b'], conv['eps_decay'], conv['eps_satr'], i, conv['eps_intvl'])
 
 		for layer in self.layers[self.div_ind:]:
-			layer.update(eps_w, eps_b, conv['mu'], conv['l2'], conv['RMSProp'])
+			layer.update(eps_w, eps_b, conv['mu'], conv['l2'], conv['RMSProp'], conv['RMSProp_decay'], conv['minsq_RMSProp'])
 
 
 	def classify(self, prediction):
@@ -594,7 +596,9 @@ def testMnist():
 			'eps_satr': 'inf',
 			'mu': 0.7,
 			'l2': 0.95,
-			'RMSProp': True
+			'RMSProp': True,
+			'RMSProp_decay': 0.9,
+			'minsq_RMSProp': 0.0
 		},
 
 		'conv': {
@@ -605,7 +609,9 @@ def testMnist():
 			'eps_satr': 'inf',
 			'mu': 0.7,
 			'l2': 0.95,
-			'RMSProp': True
+			'RMSProp': True,
+			'RMSProp_decay': 0.9,
+			'minsq_RMSProp': 0
 		}
 	}
 

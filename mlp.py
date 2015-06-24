@@ -208,7 +208,7 @@ class PerceptronLayer():
 		return np.dot(dEds.T, self.w).T * self.dropped #dEdx
 
 
-	def update(self, eps_w, eps_b, mu, l2, useRMSProp):
+	def update(self, eps_w, eps_b, mu, l2, useRMSProp, RMSProp_decay, minsq_RMSProp):
 		"""
 		Update the weights in this layer.
 
@@ -218,12 +218,14 @@ class PerceptronLayer():
 			mu: Momentum coefficient.
 			l2: L2 regularization coefficent.
 			useRMSProp: Boolean indicating the use of RMSProp.
+			RMSProp_decay: Decay term for the squared average.
+			minsq_RMSProp: Constant added to square-root of squared average. 
 		"""
 		if useRMSProp:
-			self.dw_ms = (0.9 * self.dw_ms) + (0.1 * np.square(self.dEdw))
-			self.db_ms = (0.9 * self.db_ms) + (0.1 * np.square(self.dEdb))
-			self.dEdw = self.dEdw / np.sqrt(self.dw_ms)
-			self.dEdb = self.dEdb / np.sqrt(self.db_ms)
+			self.dw_ms = (RMSProp_decay * self.dw_ms) + ((1.0 - RMSProp_decay) * np.square(self.dEdw))
+			self.db_ms = (RMSProp_decay * self.db_ms) + ((1.0 - RMSProp_decay) * np.square(self.dEdb))
+			self.dEdw = self.dEdw / (np.sqrt(self.dw_ms) + minsq_RMSProp)
+			self.dEdb = self.dEdb / (np.sqrt(self.db_ms) + minsq_RMSProp)
 			self.dEdw[np.where(np.isnan(self.dEdw))] = 0
 			self.dEdb[np.where(np.isnan(self.dEdb))] = 0
 
@@ -335,17 +337,17 @@ class Mlp():
   			error = self.layers[i].bprop(error)
 
 
-  	def update(self, parameters):
+  	def update(self, params):
   		"""
   		Update the network weights using the training
   		parameters.
 
   		Args:
   		-----
-  			parameters: Training parameters.
+  			params: Training parameters.
   		"""
   		for layer in self.layers:
-  			layer.update(parameters['eps_w'], parameters['eps_b'], parameters['mu'], parameters['l2'])
+  			layer.update(params['eps_w'], params['eps_b'], params['mu'], params['l2'], params['RMSProp'], params['RMSProp_decay'], params['minsq_RMSProp'])
 
 
   	def predict(self, data):
