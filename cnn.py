@@ -17,7 +17,7 @@ import theano as thn
 import theano.tensor as tn
 import theano.tensor.nnet.conv as conv
 import matplotlib.pyplot as plt
-import pickle as pkl
+import cPickle as cpkl
 from theano import shared
 from theano.tensor.signal.downsample import max_pool_2d as max_pool
 from theano.tensor.signal.downsample import max_pool_2d_same_size as max_pool_same
@@ -52,8 +52,8 @@ def fastConv2d(data, kernel, convtype='valid', stride=(1, 1)):
 		A N x k x m x n array representing the output.
 	"""
 	_data, _kernel =  np.asarray(data, dtype='float32'), np.asarray(kernel, dtype='float32')
-	d = tn.dtensor4('d')
-	k = tn.dtensor4('k')
+	d = tn.ftensor4('d')
+	k = tn.ftensor4('k')
 	f = thn.function([], conv.conv2d(d, k, None, None, convtype, stride), givens={d: shared(_data), k: shared(_kernel)})
 	return f()
 
@@ -146,7 +146,7 @@ class PoolLayer():
 		"""
 		if self.type == 'max':
 			_data = np.asarray(data, dtype='float32')
-			x = tn.dtensor4('x')
+			x = tn.ftensor4('x')
 			f = thn.function([], max_pool(x, self.factor), givens={x: shared(_data)})
 			g = thn.function([], max_pool_same(x, self.factor)/x, givens={x: shared(_data + 0.0000000001)})
 			self.grad = g()
@@ -495,7 +495,7 @@ class Cnn():
 		}
 
 		f = open(filename, 'w')
-		pkl.dump(model, f, 1)
+		cpkl.dump(model, f, 1)
 		f.close()
 
 
@@ -509,7 +509,7 @@ class Cnn():
 			filename: String repr. name of file.
 		"""
 		f = open(filename, 'r')
-		model = pkl.load(f)
+		model = cpkl.load(f)
 
 		if model != {} and self.layers == []:
 			self.layers = model["fc"] + model["conv"]
@@ -609,9 +609,8 @@ def testMnist():
 		}
 	}
 
-	#cnn = Cnn(layers)
-	#cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
-	return layers
+	cnn = Cnn(layers)
+	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
 
 
 def testCifar10():
