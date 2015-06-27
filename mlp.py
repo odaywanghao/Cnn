@@ -169,7 +169,7 @@ class PerceptronLayer():
 		self.init_w, self.init_b = init_w, init_b
 		
 		if outputType == 'sigmoid' or outputType == 'tanh':
-			self.init_w = (6.0/(no_outputs + no_inputs))
+			self.init_w = (6.0 / (no_outputs + no_inputs))
 
 		self.w = self.init_w * np.random.randn(no_outputs, no_inputs)
 		self.b = self.init_b * np.ones((no_outputs, 1))
@@ -264,7 +264,7 @@ class PerceptronLayer():
 		elif self.o_type == 'softmax': 
 			return softmax(self.s)
 		else:
-			return self.s #Sum
+			return self.s #linear
 
 
 class Mlp():

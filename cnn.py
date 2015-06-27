@@ -12,6 +12,8 @@
 # ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
 # OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 
+import time
+import random
 import numpy as np
 import theano as thn
 import theano.tensor as tn
@@ -30,12 +32,42 @@ from util import *
 def centerDataset(data):
 
 	new_data = np.transpose(data, (0, 3, 1, 2))
-	new_data = np.swapaxes(new_data, 0, 1)
-	scaled_data = new_data - np.mean(new_data, axis=1)
-	scaled_data = np.swapaxes(scaled_data, 0, 1)
+	N, k, m, n = new_data.shape
+	new_data = new_data.reshape(N, np.prod(new_data.shape[1:]))
+	x = tn.fmatrix('x')
+	f = thn.function([], (x - tn.mean(x, axis=0)) / tn.var(x, axis=0), givens={x: shared(np.asarray(new_data, dtype='float32'))})
+	scaled_data = f()
+	# replace illegal values with 0.
+	scaled_data[np.where(np.isnan(scaled_data))] = 0
+	scaled_data = scaled_data.reshape(N, k, m, n)
 	scaled_data = np.transpose(scaled_data, (0, 2, 3, 1))
 
 	return scaled_data
+
+
+def displayCov(data):
+	"""
+	Display the covariance matrix of the pixels
+	across the image channels.
+
+	Args:
+	-----
+		data: No_imgs x img_height x img_width x no_channels array.
+	"""
+
+	new_data, k = np.transpose(data, (0, 3, 1, 2)), data.shape[3]
+	new_data = new_data.reshape(new_data.shape[0], np.prod(new_data.shape[1:]))
+	zero_data = new_data - np.mean(new_data, axis=0)
+	cov = np.cov(zero_data.T)
+
+	N = cov.shape[0]
+	f, sps = plt.subplots(k, k, sharex=True, sharey=True)
+	for i in xrange(0, k):
+		for j in xrange(0, k):
+			y, x = (N * i) / k, (N * j) / k
+			sps[i, j].imshow(cov[y : y + (N / k), x : x + (N / k)], aspect='auto')
+
+	plt.show()
 
 
 def fastConv2d(data, kernel, convtype='valid', stride=(1, 1)):
@@ -633,7 +665,24 @@ def testCifar10():
 	valid_label = data['train_label'][49500:50000]
 	test_label = data['test_label']
 
-	#print "Centering images..."
+	i = random.randint(0, 49500)
+	pic = train_data[i]
+
+	print "Centering images..."
+	train_data = centerDataset(train_data)
+	valid_data = centerDataset(valid_data)
+	test_data = centerDataset(test_data)
+
+	f, (a, b) = plt.subplots(1, 2)
+	a.imshow(pic)
+	a.axis('off')
+	b.imshow(train_data[i])
+	b.axis('off')
+	plt.show()
+	f.get_tight_layout()
+
+	print "Displaying covariance matrix across channels..."
+	displayCov(train_data[0:1000])
 
 	print "Initializing network..."
 	# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
@@ -677,12 +726,12 @@ def testCifar10():
 		}
 	}
 
-	cnn = Cnn(layers)
-	cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
+	#cnn = Cnn(layers)
+	#cnn.train(train_data, train_label, valid_data, valid_label, test_data, test_label, params)
 
 
 
 if __name__ == '__main__':
 
-	testMnist()
-	#testCifar10()
+	#testMnist()
+	testCifar10()
