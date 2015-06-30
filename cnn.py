@@ -594,12 +594,6 @@ def testMnist():
 	valid_label = data['valid_label'][0:1000]
 	test_label = data['test_label']
 
-	print "Centering dataset..."
-
-	train_data = centerDataset(train_data)
-	valid_data = centerDataset(valid_data)
-	test_data = centerDataset(test_data)
-
 	print "Initializing network..."
 	# Ensure size of output maps in preceeding layer is equals to the size of input maps in next layer.
 	layers = {
@@ -733,5 +727,5 @@ def testCifar10():
 
 if __name__ == '__main__':
 
-	#testMnist()
-	testCifar10()
+	testMnist()
+	#testCifar10()
